@@ -193,13 +193,16 @@ class AuthManager: ObservableObject {
     }
     
     /// Update user profile
-    func updateProfile(fullName: String?, dietaryPreferences: [String]?, searchRadius: Double?) async throws {
+    func updateProfile(role: String? = nil, fullName: String? = nil, dietaryPreferences: [String]? = nil, searchRadius: Double? = nil) async throws {
         guard let userId = currentUserId else {
             throw NetworkError.unauthorized
         }
         
         var updates: [String: Any] = ["updated_at": Date().toISO8601String()]
         
+        if let role = role {
+            updates["role"] = role
+        }
         if let name = fullName {
             updates["full_name"] = name
         }

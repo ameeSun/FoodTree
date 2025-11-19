@@ -22,22 +22,42 @@ struct ProfileView: View {
                             .fill(Color.brandPrimary.opacity(0.2))
                             .frame(width: 80, height: 80)
                             .overlay(
-                                Image(systemName: "person.fill")
-                                    .font(.system(size: 36))
-                                    .foregroundColor(.brandPrimary)
+                                Group {
+                                    if let avatarUrl = AuthManager.shared.currentProfile?.avatarUrl,
+                                       let url = URL(string: avatarUrl) {
+                                        AsyncImage(url: url) { image in
+                                            image.resizable()
+                                        } placeholder: {
+                                            Image(systemName: "person.fill")
+                                                .font(.system(size: 36))
+                                                .foregroundColor(.brandPrimary)
+                                        }
+                                    } else {
+                                        Image(systemName: "person.fill")
+                                            .font(.system(size: 36))
+                                            .foregroundColor(.brandPrimary)
+                                    }
+                                }
                             )
+                            .clipShape(Circle())
                         
                         VStack(spacing: 4) {
-                            Text("Stanford Student")
+                            Text(AuthManager.shared.currentProfile?.fullName ?? "Stanford Student")
                                 .font(.system(size: 24, weight: .semibold))
                                 .foregroundColor(.inkPrimary)
                             
-                            Text("student@stanford.edu")
+                            Text(AuthManager.shared.currentProfile?.email ?? "student@stanford.edu")
                                 .font(.system(size: 16))
                                 .foregroundColor(.inkSecondary)
                         }
                     }
                     .padding(.top, 20)
+                    .onAppear {
+                        // Refresh profile if needed
+                        Task {
+                            await AuthManager.shared.checkSession()
+                        }
+                    }
                     
                     // Role toggle
                     VStack(alignment: .leading, spacing: 12) {
@@ -49,8 +69,18 @@ struct ProfileView: View {
                         HStack(spacing: 12) {
                             ForEach(UserRole.allCases, id: \.self) { role in
                                 Button(action: {
-                                    appState.userRole = role
-                                    FTHaptics.medium()
+                                    Task {
+                                        do {
+                                        try await AuthManager.shared.updateProfile(
+                                            role: role.rawValue.lowercased()
+                                        )
+                                            appState.userRole = role
+                                            FTHaptics.medium()
+                                        } catch {
+                                            print("❌ ProfileView: Failed to update role: \(error.localizedDescription)")
+                                            FTHaptics.warning()
+                                        }
+                                    }
                                 }) {
                                     VStack(spacing: 8) {
                                         Image(systemName: role == .student ? "person.fill" : "building.2.fill")
@@ -126,8 +156,27 @@ struct ProfileView: View {
                         }
                         
                         SettingsSection(title: "Account") {
-                            SettingsRow(icon: "checkmark.seal", title: "Verify as organizer", value: nil, highlighted: appState.userRole == .organizer)
-                            SettingsRow(icon: "arrow.right.square", title: "Sign Out", value: nil, destructive: true)
+                            SettingsRow(
+                                icon: "checkmark.seal",
+                                title: "Verify as organizer",
+                                value: nil,
+                                highlighted: appState.userRole == .organizer
+                            ) {
+                                // TODO: Show verification request sheet
+                                FTHaptics.light()
+                            }
+                            SettingsRow(
+                                icon: "arrow.right.square",
+                                title: "Sign Out",
+                                value: nil,
+                                destructive: true
+                            ) {
+                                Task {
+                                    await AuthManager.shared.signOut()
+                                    appState.hasCompletedOnboarding = false
+                                    // App will automatically show onboarding/login
+                                }
+                            }
                         }
                     }
                     .padding(.horizontal, FTLayout.paddingM)
@@ -165,12 +214,15 @@ struct ProfileView: View {
     }
     
     private var dietaryFiltersSummary: String {
-        if appState.dietaryPreferences.isEmpty {
+        // Get from AuthManager profile or fallback to appState
+        let preferences = AuthManager.shared.currentProfile?.dietaryPreferences.compactMap { DietaryTag(rawValue: $0) } ?? appState.dietaryPreferences
+        
+        if preferences.isEmpty {
             return "None"
-        } else if appState.dietaryPreferences.count == 1 {
-            return appState.dietaryPreferences.first?.displayName ?? "1 selected"
+        } else if preferences.count == 1 {
+            return preferences.first?.displayName ?? "1 selected"
         } else {
-            return "\(appState.dietaryPreferences.count) selected"
+            return "\(preferences.count) selected"
         }
     }
 }
@@ -205,10 +257,12 @@ struct SettingsRow: View {
     let value: String?
     var highlighted: Bool = false
     var destructive: Bool = false
+    var action: (() -> Void)?
     
     var body: some View {
         Button(action: {
             FTHaptics.light()
+            action?()
         }) {
             HStack(spacing: 12) {
                 Image(systemName: icon)
@@ -253,6 +307,16 @@ struct SettingsRow: View {
 struct SettingsView: View {
     @Environment(\.dismiss) var dismiss
     @EnvironmentObject var appState: AppState
+    @StateObject private var authManager = AuthManager.shared
+    
+    // Load initial values from profile
+    private var initialDietaryPreferences: Set<DietaryTag> {
+        authManager.currentProfile?.dietaryPreferences.compactMap { DietaryTag(rawValue: $0) } ?? appState.dietaryPreferences
+    }
+    
+    private var initialSearchRadius: Double {
+        authManager.currentProfile?.searchRadiusMiles ?? appState.radiusPreference
+    }
     
     var body: some View {
         NavigationView {
@@ -260,14 +324,30 @@ struct SettingsView: View {
                 Section("Dietary Preferences") {
                     ForEach(DietaryTag.allCases) { tag in
                         Toggle(isOn: Binding(
-                            get: { appState.dietaryPreferences.contains(tag) },
+                            get: { initialDietaryPreferences.contains(tag) },
                             set: { isOn in
+                                var newPreferences = appState.dietaryPreferences
                                 if isOn {
-                                    appState.dietaryPreferences.insert(tag)
+                                    newPreferences.insert(tag)
                                 } else {
-                                    appState.dietaryPreferences.remove(tag)
+                                    newPreferences.remove(tag)
                                 }
-                                FTHaptics.light()
+                                appState.dietaryPreferences = newPreferences
+                                
+                                // Save to backend
+                                Task {
+                                    let dietaryStrings = Array(newPreferences.map { $0.rawValue })
+                                    do {
+                                        try await AuthManager.shared.updateProfile(
+                                            dietaryPreferences: dietaryStrings
+                                        )
+                                        FTHaptics.light()
+                                    } catch {
+                                        print("❌ SettingsView: Failed to save dietary preferences: \(error.localizedDescription)")
+                                        // Revert on error
+                                        appState.dietaryPreferences = appState.dietaryPreferences
+                                    }
+                                }
                             }
                         )) {
                             HStack {
@@ -285,11 +365,25 @@ struct SettingsView: View {
                             .font(.system(size: 15, weight: .semibold))
                             .foregroundColor(.brandPrimary)
                         
-                        Slider(value: $appState.radiusPreference, in: 0.25...3.0, step: 0.25)
-                            .tint(.brandPrimary)
-                            .onChange(of: appState.radiusPreference) { _ in
-                                FTHaptics.light()
+                        Slider(value: Binding(
+                            get: { initialSearchRadius },
+                            set: { newValue in
+                                appState.radiusPreference = newValue
+                                
+                                // Save to backend
+                                Task {
+                                    do {
+                                        try await AuthManager.shared.updateProfile(
+                                            searchRadius: newValue
+                                        )
+                                        FTHaptics.light()
+                                    } catch {
+                                        print("❌ SettingsView: Failed to save search radius: \(error.localizedDescription)")
+                                    }
+                                }
                             }
+                        ), in: 0.25...3.0, step: 0.25)
+                            .tint(.brandPrimary)
                     }
                 }
                 

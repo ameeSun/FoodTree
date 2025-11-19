@@ -250,14 +250,25 @@ struct PermissionsView: View {
     private func grantPermission() {
         FTHaptics.medium()
         
-        // Mock permission grant
         if currentStep == 0 {
-            appState.hasLocationPermission = true
+            // Request location permission
+            LocationManager.shared.requestLocationPermission()
+            // Check authorization status
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                let status = LocationManager.shared.authorizationStatus
+                appState.hasLocationPermission = (status == .authorizedWhenInUse || status == .authorizedAlways)
+                nextStep()
+            }
         } else {
-            appState.hasNotificationPermission = true
+            // Request notification permission
+            NotificationManager.shared.requestAuthorization()
+            // Check authorization status
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                let status = NotificationManager.shared.authorizationStatus
+                appState.hasNotificationPermission = (status == .authorized)
+                nextStep()
+            }
         }
-        
-        nextStep()
     }
     
     private func skipPermission() {

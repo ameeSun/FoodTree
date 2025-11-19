@@ -10,6 +10,8 @@ import CoreLocation
 import Combine
 
 class LocationManager: NSObject, ObservableObject {
+    static let shared = LocationManager()
+    
     @Published var location: CLLocationCoordinate2D?
     @Published var authorizationStatus: CLAuthorizationStatus = .notDetermined
     

@@ -489,12 +489,18 @@ struct EmptyDashboardView: View {
 }
 
 // MARK: - Organizer ViewModel
+@MainActor
 class OrganizerViewModel: ObservableObject {
-    @Published var posts: [FoodPost]
+    @Published var posts: [FoodPost] = []
+    @Published var isLoading = false
+    
+    private let repository = FoodPostRepository()
     
     init() {
-        // Filter to show only some posts as "organizer's posts"
-        self.posts = Array(MockData.generatePosts().prefix(4))
+        // Load user's posts from backend
+        Task {
+            await loadMyPosts()
+        }
     }
     
     var totalViews: Int {
@@ -505,30 +511,65 @@ class OrganizerViewModel: ObservableObject {
         posts.reduce(0) { $0 + $1.metrics.onMyWay }
     }
     
+    func loadMyPosts() async {
+        isLoading = true
+        defer { isLoading = false }
+        
+        do {
+            self.posts = try await repository.fetchMyPosts()
+            print("✅ OrganizerViewModel: Loaded \(posts.count) posts")
+        } catch {
+            print("❌ OrganizerViewModel: Failed to load posts: \(error.localizedDescription)")
+            // Keep empty array on error
+            self.posts = []
+        }
+    }
+    
     func markAsLow(_ post: FoodPost) {
-        if let index = posts.firstIndex(where: { $0.id == post.id }) {
-            posts[index].status = .low
+        Task {
+            do {
+                try await repository.markAsLow(postId: post.id)
+                await loadMyPosts() // Refresh
+                FTHaptics.warning()
+            } catch {
+                print("❌ OrganizerViewModel: Failed to mark as low: \(error.localizedDescription)")
+            }
         }
     }
     
     func markAsGone(_ post: FoodPost) {
-        if let index = posts.firstIndex(where: { $0.id == post.id }) {
-            posts[index].status = .gone
+        Task {
+            do {
+                try await repository.markAsGone(postId: post.id)
+                await loadMyPosts() // Refresh
+                FTHaptics.warning()
+            } catch {
+                print("❌ OrganizerViewModel: Failed to mark as gone: \(error.localizedDescription)")
+            }
         }
     }
     
     func extendTime(_ post: FoodPost) {
-        if let index = posts.firstIndex(where: { $0.id == post.id }) {
-            if let currentExpiry = posts[index].expiresAt {
-                posts[index].expiresAt = currentExpiry.addingTimeInterval(15 * 60)
+        Task {
+            do {
+                try await repository.extendPost(postId: post.id, additionalMinutes: 15)
+                await loadMyPosts() // Refresh
+                FTHaptics.medium()
+            } catch {
+                print("❌ OrganizerViewModel: Failed to extend time: \(error.localizedDescription)")
             }
         }
     }
     
     func adjustQuantity(_ post: FoodPost, to quantity: Int) {
-        if let index = posts.firstIndex(where: { $0.id == post.id }) {
-            posts[index].quantityApprox = quantity
-            posts[index].updateStatus()
+        Task {
+            do {
+                try await repository.adjustQuantity(postId: post.id, newQuantity: quantity)
+                await loadMyPosts() // Refresh
+                FTHaptics.medium()
+            } catch {
+                print("❌ OrganizerViewModel: Failed to adjust quantity: \(error.localizedDescription)")
+            }
         }
     }
 }

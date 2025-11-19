@@ -325,17 +325,30 @@ struct FoodDetailView: View {
             }
             .confirmationDialog("Navigate to pickup", isPresented: $showNavigationOptions) {
                 Button("Open in Apple Maps") {
-                    // Open Apple Maps (stub)
+                    let mapItem = MKMapItem(placemark: MKPlacemark(coordinate: post.location.coordinate))
+                    mapItem.name = post.location.building ?? "Food pickup location"
+                    mapItem.openInMaps(launchOptions: [MKLaunchOptionsDirectionsModeKey: MKLaunchOptionsDirectionsModeWalking])
                     FTHaptics.light()
                 }
                 
                 Button("Open in Google Maps") {
-                    // Open Google Maps (stub)
+                    let coordinate = post.location.coordinate
+                    let urlString = "comgooglemaps://?q=\(coordinate.latitude),\(coordinate.longitude)&directionsmode=walking"
+                    if let url = URL(string: urlString), UIApplication.shared.canOpenURL(url) {
+                        UIApplication.shared.open(url)
+                    } else {
+                        // Fallback to web version
+                        let webUrlString = "https://www.google.com/maps?q=\(coordinate.latitude),\(coordinate.longitude)"
+                        if let webUrl = URL(string: webUrlString) {
+                            UIApplication.shared.open(webUrl)
+                        }
+                    }
                     FTHaptics.light()
                 }
                 
                 Button("Copy address") {
-                    // Copy to clipboard (stub)
+                    let address = post.location.building ?? "\(post.location.lat), \(post.location.lng)"
+                    UIPasteboard.general.string = address
                     FTHaptics.light()
                 }
                 
@@ -364,23 +377,47 @@ struct FoodDetailView: View {
     }
     
     private func toggleOnMyWay() {
-        isOnMyWay.toggle()
-        if isOnMyWay {
-            FTHaptics.success()
-            showSuccessConfetti = true
-        } else {
-            FTHaptics.light()
+        Task {
+            do {
+                let repository = FoodPostRepository()
+                let isOnMyWayResult = try await repository.toggleOnMyWay(postId: post.id)
+                self.isOnMyWay = isOnMyWayResult
+                if isOnMyWayResult {
+                    FTHaptics.success()
+                    showSuccessConfetti = true
+                } else {
+                    FTHaptics.light()
+                }
+            } catch {
+                print("❌ FoodDetailView: Failed to toggle on my way: \(error.localizedDescription)")
+                FTHaptics.warning()
+            }
         }
     }
     
     private func sharePost() {
+        // Open in Apple Maps
+        let mapItem = MKMapItem(placemark: MKPlacemark(coordinate: post.location.coordinate))
+        mapItem.name = post.location.building ?? "Food pickup location"
+        mapItem.openInMaps(launchOptions: [MKLaunchOptionsDirectionsModeKey: MKLaunchOptionsDirectionsModeWalking])
         FTHaptics.light()
-        // Share sheet (stub)
     }
     
     private func savePost() {
-        FTHaptics.medium()
-        // Save post (stub)
+        Task {
+            do {
+                let repository = FoodPostRepository()
+                let isSaved = try await repository.toggleSavedPost(postId: post.id)
+                if isSaved {
+                    FTHaptics.medium()
+                } else {
+                    FTHaptics.light()
+                }
+            } catch {
+                print("❌ FoodDetailView: Failed to save post: \(error.localizedDescription)")
+                FTHaptics.warning()
+            }
+        }
     }
 }
 
@@ -533,10 +570,10 @@ struct LiveStatusBar: View {
 struct ReportView: View {
     let postId: String
     @Binding var isPresented: Bool
-    @State private var selectedReason: ReportReason?
+    @State private var selectedReason: LocalReportReason?
     @State private var additionalInfo = ""
     
-    enum ReportReason: String, CaseIterable {
+    enum LocalReportReason: String, CaseIterable {
         case spam = "Spam or misleading"
         case unsafe = "Food safety concern"
         case wrongLocation = "Wrong location"
@@ -548,7 +585,7 @@ struct ReportView: View {
         NavigationView {
             Form {
                 Section {
-                    ForEach(ReportReason.allCases, id: \.self) { reason in
+                    ForEach(LocalReportReason.allCases, id: \.self) { reason in
                         Button(action: {
                             selectedReason = reason
                             FTHaptics.light()
@@ -596,9 +633,40 @@ struct ReportView: View {
     }
     
     private func submitReport() {
-        FTHaptics.warning()
-        // Submit report (stub)
-        isPresented = false
+        guard let localReason = selectedReason else { return }
+        
+        Task {
+            do {
+                let repository = ReportRepository()
+                // Map local LocalReportReason enum to repository ReportReason enum
+                let reportReason: ReportReason
+                switch localReason {
+                case .spam:
+                    reportReason = .spam
+                case .unsafe:
+                    reportReason = .unsafe
+                case .wrongLocation:
+                    reportReason = .wrongLocation
+                case .inappropriate:
+                    reportReason = .inappropriate
+                case .other:
+                    reportReason = .other
+                }
+                
+                try await repository.submitReport(
+                    postId: postId,
+                    reason: reportReason,
+                    comment: additionalInfo.isEmpty ? nil : additionalInfo
+                )
+                
+                FTHaptics.warning()
+                isPresented = false
+            } catch {
+                print("❌ ReportView: Failed to submit report: \(error.localizedDescription)")
+                FTHaptics.warning()
+                // Keep sheet open on error so user can retry
+            }
+        }
     }
 }
 
