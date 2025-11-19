@@ -83,11 +83,7 @@ struct FeedView: View {
                 }
             }
             .sheet(isPresented: $showFilters) {
-                FilterView(filters: $viewModel.filters) {
-                    Task {
-                        await viewModel.refresh()
-                    }
-                }
+                FilterView(filters: $viewModel.filters)
             }
             .sheet(isPresented: $showDetail) {
                 if let post = selectedPost {
@@ -99,25 +95,17 @@ struct FeedView: View {
 }
 
 // MARK: - Feed ViewModel
-@MainActor
 class FeedViewModel: ObservableObject {
-    @Published var posts: [FoodPost] = []
+    @Published var posts: [FoodPost]
     @Published var userLocation: CLLocationCoordinate2D?
     @Published var filters = MapFilters()
     @Published var isLoading = false
     @Published var savedPosts: Set<String> = []
     @Published var hiddenPosts: Set<String> = []
     
-    private let repository = FoodPostRepository()
-    
     init() {
-        // Get real user location or fallback to Stanford center
-        self.userLocation = LocationManager.shared.location ?? MockData.stanfordCenter
-        
-        // Load posts from backend
-        Task {
-            await refresh()
-        }
+        self.posts = MockData.generatePosts()
+        self.userLocation = MockData.stanfordCenter
     }
     
     var hasActiveFilters: Bool {
@@ -125,58 +113,20 @@ class FeedViewModel: ObservableObject {
     }
     
     func refresh() async {
-        guard let center = userLocation else {
-            print("⚠️ FeedViewModel: No user location available")
-            return
-        }
-        
         isLoading = true
-        defer { isLoading = false }
-        
-        do {
-            // Convert filters to PostFilters
-            let postFilters = PostFilters(
-                dietary: Array(filters.dietary.map { $0.rawValue }),
-                statuses: [],
-                verifiedOnly: filters.onlyVerified
-            )
-            
-            // Use default radius of ~3 miles (5000 meters)
-            let radiusMeters: Double = 5000
-            
-            self.posts = try await repository.fetchNearbyPosts(
-                center: center,
-                radiusMeters: radiusMeters,
-                filters: postFilters
-            )
-            
-            print("✅ FeedViewModel: Refreshed \(posts.count) posts")
-        } catch {
-            print("❌ FeedViewModel: Failed to refresh posts: \(error.localizedDescription)")
-            // Keep existing posts on error
-        }
+        // Simulate network delay
+        try? await Task.sleep(nanoseconds: 1_000_000_000)
+        posts = MockData.generatePosts()
+        isLoading = false
     }
     
     func savePost(_ post: FoodPost) {
-        Task {
-            do {
-                let isSaved = try await repository.toggleSavedPost(postId: post.id)
-                if isSaved {
-                    savedPosts.insert(post.id)
-                    FTHaptics.medium()
-                } else {
-                    savedPosts.remove(post.id)
-                }
-            } catch {
-                print("❌ FeedViewModel: Failed to save post: \(error.localizedDescription)")
-            }
-        }
+        savedPosts.insert(post.id)
     }
     
     func hidePost(_ post: FoodPost) {
         hiddenPosts.insert(post.id)
         posts.removeAll { $0.id == post.id }
-        // Optionally persist to UserDefaults for session persistence
     }
 }
 

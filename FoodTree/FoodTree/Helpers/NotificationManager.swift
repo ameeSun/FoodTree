@@ -10,8 +10,6 @@ import UserNotifications
 import Combine
 
 class NotificationManager: ObservableObject {
-    static let shared = NotificationManager()
-    
     @Published var authorizationStatus: UNAuthorizationStatus = .notDetermined
     @Published var pendingNotifications: [UNNotificationRequest] = []
     

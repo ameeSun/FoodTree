@@ -64,16 +64,11 @@ struct PerishabilityBadge: View {
     
     var body: some View {
         HStack(spacing: 5) {
-            Group {
-                if showAnimation && perishability == .high {
-                    Image(systemName: "drop.fill")
-                        .font(.system(size: 11))
-                        .modifier(PerishabilityPulseModifier())
-                } else {
-                    Image(systemName: "drop.fill")
-                        .font(.system(size: 11))
+            Image(systemName: "drop.fill")
+                .font(.system(size: 11))
+                .if(showAnimation && perishability == .high) { view in
+                    view.modifier(PerishabilityPulseModifier())
                 }
-            }
             
             Text(perishability.displayName)
                 .font(.system(size: 12, weight: .medium))

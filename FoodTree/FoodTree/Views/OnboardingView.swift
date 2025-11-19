@@ -6,7 +6,6 @@
 //
 
 import SwiftUI
-import CoreLocation
 
 struct OnboardingView: View {
     @EnvironmentObject var appState: AppState
@@ -251,25 +250,14 @@ struct PermissionsView: View {
     private func grantPermission() {
         FTHaptics.medium()
         
+        // Mock permission grant
         if currentStep == 0 {
-            // Request location permission
-            LocationManager.shared.requestLocationPermission()
-            // Check authorization status
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                let status = LocationManager.shared.authorizationStatus
-                appState.hasLocationPermission = (status == .authorizedWhenInUse || status == .authorizedAlways)
-                nextStep()
-            }
+            appState.hasLocationPermission = true
         } else {
-            // Request notification permission
-            NotificationManager.shared.requestAuthorization()
-            // Check authorization status
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                let status = NotificationManager.shared.authorizationStatus
-                appState.hasNotificationPermission = (status == .authorized)
-                nextStep()
-            }
+            appState.hasNotificationPermission = true
         }
+        
+        nextStep()
     }
     
     private func skipPermission() {

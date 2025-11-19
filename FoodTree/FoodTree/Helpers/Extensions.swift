@@ -35,6 +35,12 @@ extension Date {
         let seconds = self.timeIntervalSince(Date())
         return max(0, Int(seconds / 60))
     }
+    
+    func toISO8601String() -> String {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter.string(from: self)
+    }
 }
 
 // MARK: - CLLocationCoordinate2D Extensions

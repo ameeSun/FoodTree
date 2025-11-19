@@ -159,71 +159,29 @@ struct MapView: View {
             .ignoresSafeArea()
         }
         .sheet(isPresented: $showFilters) {
-            FilterView(filters: $viewModel.filters) {
-                Task {
-                    await viewModel.loadPosts()
-                }
-            }
+            FilterView(filters: $viewModel.filters)
         }
     }
 }
 
 // MARK: - Map ViewModel
-@MainActor
 class MapViewModel: ObservableObject {
-    @Published var posts: [FoodPost] = []
+    @Published var posts: [FoodPost]
     @Published var userLocation: CLLocationCoordinate2D?
     @Published var filters = MapFilters()
-    @Published var isLoading = false
-    
-    private let repository = FoodPostRepository()
     
     init() {
-        // Get real user location or fallback to Stanford center
-        self.userLocation = LocationManager.shared.location ?? MockData.stanfordCenter
+        self.posts = MockData.generatePosts()
+        self.userLocation = MockData.stanfordCenter
         
-        // Load posts from backend
-        Task {
-            await loadPosts()
+        // Simulate location updates
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+            self.userLocation = MockData.stanfordCenter
         }
     }
     
     var hasActiveFilters: Bool {
         !filters.dietary.isEmpty || filters.distance < 3.0 || filters.onlyVerified
-    }
-    
-    func loadPosts() async {
-        guard let center = userLocation else {
-            print("⚠️ MapViewModel: No user location available")
-            return
-        }
-        
-        isLoading = true
-        defer { isLoading = false }
-        
-        do {
-            // Convert filters to PostFilters
-            let postFilters = PostFilters(
-                dietary: Array(filters.dietary.map { $0.rawValue }),
-                statuses: [],
-                verifiedOnly: filters.onlyVerified
-            )
-            
-            // Convert distance from miles to meters
-            let radiusMeters = filters.distance * 1609.34
-            
-            self.posts = try await repository.fetchNearbyPosts(
-                center: center,
-                radiusMeters: radiusMeters,
-                filters: postFilters
-            )
-            
-            print("✅ MapViewModel: Loaded \(posts.count) posts")
-        } catch {
-            print("❌ MapViewModel: Failed to load posts: \(error.localizedDescription)")
-            // Keep empty array on error
-            self.posts = []
-        }
     }
 }
 
@@ -242,12 +200,10 @@ struct FilterView: View {
     @Environment(\.dismiss) var dismiss
     @Binding var filters: MapFilters
     @State private var localFilters: MapFilters
-    var onApply: (() -> Void)?
     
-    init(filters: Binding<MapFilters>, onApply: (() -> Void)? = nil) {
+    init(filters: Binding<MapFilters>) {
         self._filters = filters
         self._localFilters = State(initialValue: filters.wrappedValue)
-        self.onApply = onApply
     }
     
     var body: some View {
@@ -361,7 +317,6 @@ struct FilterView: View {
                     Button("Apply") {
                         filters = localFilters
                         FTHaptics.medium()
-                        onApply?() // Reload posts with new filters
                         dismiss()
                     }
                     .fontWeight(.semibold)

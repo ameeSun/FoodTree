@@ -96,9 +96,9 @@ struct InboxView: View {
             }
         }
         .onAppear {
-            // Refresh notifications from backend
-            Task {
-                await appState.loadNotifications()
+            // Seed notifications if empty
+            if appState.notifications.isEmpty {
+                appState.notifications = MockData.generateNotifications()
             }
         }
     }
@@ -117,30 +117,14 @@ struct InboxView: View {
     }
     
     private func markAsRead(_ notification: AppNotification) {
-        Task {
-            do {
-                let repository = NotificationRepository()
-                try await repository.markAsRead(notificationId: notification.id)
-                // Refresh notifications
-                await appState.loadNotifications()
-                FTHaptics.light()
-            } catch {
-                print("❌ InboxView: Failed to mark as read: \(error.localizedDescription)")
-            }
+        if let index = appState.notifications.firstIndex(where: { $0.id == notification.id }) {
+            appState.notifications[index].read = true
         }
     }
     
     private func markAllAsRead() {
-        Task {
-            do {
-                let repository = NotificationRepository()
-                try await repository.markAllAsRead()
-                // Refresh notifications
-                await appState.loadNotifications()
-                FTHaptics.medium()
-            } catch {
-                print("❌ InboxView: Failed to mark all as read: \(error.localizedDescription)")
-            }
+        for index in appState.notifications.indices {
+            appState.notifications[index].read = true
         }
     }
 }

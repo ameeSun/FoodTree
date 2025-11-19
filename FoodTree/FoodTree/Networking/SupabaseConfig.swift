@@ -1,100 +1,68 @@
-//
-//  SupabaseConfig.swift
-//  FoodTree
-//
-//  Supabase client configuration
-//  IMPORTANT: Add Supabase Swift SDK via SPM: https://github.com/supabase-community/supabase-swift
-//
-
 import Foundation
 import Supabase
 
-/// Configuration for Supabase connection
-/// Keys are read from Info.plist (NEVER hardcode sensitive keys)
 struct SupabaseConfig {
     static let shared = SupabaseConfig()
     
     let client: SupabaseClient
     
     private init() {
-        // Read configuration from Info.plist
-        guard let url = URL(string: Config.supabaseURL) else {
-            fatalError("Invalid SUPABASE_URL in Info.plist")
+        // Read from Info.plist
+        // Note: In a real app, you might want to use a more secure way to store keys if possible,
+        // but for this prototype, Info.plist or a Config struct is fine.
+        // We will use a Config struct approach for better type safety and easy swapping.
+        
+        print("🔧 DEBUG: Initializing SupabaseConfig...")
+        print("🔧 DEBUG: All Info.plist keys: \(Bundle.main.infoDictionary?.keys.sorted() ?? [])")
+        
+        let urlString = Config.supabaseURL
+        let key = Config.supabaseAnonKey
+        
+        print("🔧 DEBUG: URL String: '\(urlString)'")
+        print("🔧 DEBUG: Key length: \(key.count)")
+        
+        guard let url = URL(string: urlString), !urlString.isEmpty, !key.isEmpty else {
+            // Fallback for development/preview if keys are missing, to prevent crash
+            print("⚠️ WARNING: Supabase credentials missing. Auth will not work.")
+            print("⚠️ URL valid: \(URL(string: urlString) != nil), URL empty: \(urlString.isEmpty), Key empty: \(key.isEmpty)")
+            self.client = SupabaseClient(supabaseURL: URL(string: "https://placeholder.supabase.co")!, supabaseKey: "placeholder")
+            return
         }
         
-        guard !Config.supabaseAnonKey.isEmpty else {
-            fatalError("SUPABASE_ANON_KEY not found in Info.plist")
-        }
-        
+        print("✅ Supabase client initialized successfully with URL: \(url)")
         self.client = SupabaseClient(
             supabaseURL: url,
-            supabaseKey: Config.supabaseAnonKey,
-            options: SupabaseClientOptions(
-                auth: SupabaseClientOptions.AuthOptions(
-                    autoRefreshToken: true
-                )
-            )
+            supabaseKey: key
         )
-        
-        print("✅ Supabase configured: \(url.absoluteString)")
     }
 }
 
-/// Helper to read configuration from Info.plist
+// Configuration helper
 struct Config {
-    /// Supabase project URL
     static var supabaseURL: String {
-        // Try reading from Info.plist (works with GENERATE_INFOPLIST_FILE)
-        if let url = Bundle.main.object(forInfoDictionaryKey: "SUPABASE_URL") as? String, !url.isEmpty {
-            return url
-        }
+        // Try to read from Info.plist first
+        let url = Bundle.main.object(forInfoDictionaryKey: "SUPABASE_URL") as? String 
+            ?? Bundle.main.object(forInfoDictionaryKey: "INFOPLIST_KEY_SUPABASE_URL") as? String 
+            ?? ""
         
-        // Fallback: Hardcoded values (temporary - should be in Info.plist)
-        // These match the values in project.pbxproj INFOPLIST_KEY entries
-        return "https://duluhjkiqoahshxhiyqz.supabase.co"
+        // If Info.plist doesn't have it, use hardcoded value
+        let finalURL = url.isEmpty ? "https://duluhjkiqoahshxhiyqz.supabase.co" : url
+        
+        print("🔍 DEBUG: SUPABASE_URL = '\(finalURL)'")
+        return finalURL
     }
     
-    /// Supabase anon key (safe to embed in client)
     static var supabaseAnonKey: String {
-        // Try reading from Info.plist (works with GENERATE_INFOPLIST_FILE)
-        if let key = Bundle.main.object(forInfoDictionaryKey: "SUPABASE_ANON_KEY") as? String, !key.isEmpty {
-            return key
-        }
+        // Try to read from Info.plist first
+        let key = Bundle.main.object(forInfoDictionaryKey: "SUPABASE_ANON_KEY") as? String 
+            ?? Bundle.main.object(forInfoDictionaryKey: "INFOPLIST_KEY_SUPABASE_ANON_KEY") as? String 
+            ?? ""
         
-        // Fallback: Hardcoded values (temporary - should be in Info.plist)
-        // These match the values in project.pbxproj INFOPLIST_KEY entries
-        return "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR1bHVoamtpcW9haHNoeGhpeXF6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjI5MDg3NjQsImV4cCI6MjA3ODQ4NDc2NH0.x8HqNSpYojZ6iEds6IDZyQtOTx4eswEgqWOA7mFphjg"
-    }
-}
-
-// MARK: - Error Types
-
-enum NetworkError: Error, LocalizedError {
-    case unauthorized
-    case notFound
-    case serverError(String)
-    case decodingError
-    case networkFailure
-    case invalidData
-    case unknown
-    
-    var errorDescription: String? {
-        switch self {
-        case .unauthorized:
-            return "You must be logged in to perform this action"
-        case .notFound:
-            return "The requested resource was not found"
-        case .serverError(let message):
-            return "Server error: \(message)"
-        case .decodingError:
-            return "Failed to parse server response"
-        case .networkFailure:
-            return "Network connection failed"
-        case .invalidData:
-            return "Invalid data provided"
-        case .unknown:
-            return "An unknown error occurred"
-        }
+        // If Info.plist doesn't have it, use hardcoded value
+        let finalKey = key.isEmpty ? "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR1bHVoamtpcW9haHNoeGhpeXF6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjI5MDg3NjQsImV4cCI6MjA3ODQ4NDc2NH0.x8HqNSpYojZ6iEds6IDZyQtOTx4eswEgqWOA7mFphjg" : key
+        
+        print("🔍 DEBUG: SUPABASE_ANON_KEY = '\(finalKey.prefix(20))...'")
+        return finalKey
     }
 }
 
