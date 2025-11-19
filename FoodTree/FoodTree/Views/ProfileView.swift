@@ -215,7 +215,12 @@ struct ProfileView: View {
     
     private var dietaryFiltersSummary: String {
         // Get from AuthManager profile or fallback to appState
-        let preferences = AuthManager.shared.currentProfile?.dietaryPreferences.compactMap { DietaryTag(rawValue: $0) } ?? appState.dietaryPreferences
+        let preferences: Set<DietaryTag>
+        if let profilePrefs = AuthManager.shared.currentProfile?.dietaryPreferences {
+            preferences = Set(profilePrefs.compactMap { DietaryTag(rawValue: $0) })
+        } else {
+            preferences = appState.dietaryPreferences
+        }
         
         if preferences.isEmpty {
             return "None"
@@ -311,7 +316,11 @@ struct SettingsView: View {
     
     // Load initial values from profile
     private var initialDietaryPreferences: Set<DietaryTag> {
-        authManager.currentProfile?.dietaryPreferences.compactMap { DietaryTag(rawValue: $0) } ?? appState.dietaryPreferences
+        if let profilePrefs = authManager.currentProfile?.dietaryPreferences {
+            return Set(profilePrefs.compactMap { DietaryTag(rawValue: $0) })
+        } else {
+            return appState.dietaryPreferences
+        }
     }
     
     private var initialSearchRadius: Double {

@@ -244,9 +244,10 @@ struct FilterView: View {
     @State private var localFilters: MapFilters
     var onApply: (() -> Void)?
     
-    init(filters: Binding<MapFilters>) {
+    init(filters: Binding<MapFilters>, onApply: (() -> Void)? = nil) {
         self._filters = filters
         self._localFilters = State(initialValue: filters.wrappedValue)
+        self.onApply = onApply
     }
     
     var body: some View {

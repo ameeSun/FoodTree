@@ -31,9 +31,7 @@ struct SupabaseConfig {
             supabaseKey: Config.supabaseAnonKey,
             options: SupabaseClientOptions(
                 auth: SupabaseClientOptions.AuthOptions(
-                    autoRefreshToken: true,
-                    persistSession: true,
-                    detectSessionInURL: true
+                    autoRefreshToken: true
                 )
             )
         )
@@ -46,18 +44,26 @@ struct SupabaseConfig {
 struct Config {
     /// Supabase project URL
     static var supabaseURL: String {
-        guard let url = Bundle.main.object(forInfoDictionaryKey: "SUPABASE_URL") as? String else {
-            return "" // Will trigger fatalError in SupabaseConfig
+        // Try reading from Info.plist (works with GENERATE_INFOPLIST_FILE)
+        if let url = Bundle.main.object(forInfoDictionaryKey: "SUPABASE_URL") as? String, !url.isEmpty {
+            return url
         }
-        return url
+        
+        // Fallback: Hardcoded values (temporary - should be in Info.plist)
+        // These match the values in project.pbxproj INFOPLIST_KEY entries
+        return "https://duluhjkiqoahshxhiyqz.supabase.co"
     }
     
     /// Supabase anon key (safe to embed in client)
     static var supabaseAnonKey: String {
-        guard let key = Bundle.main.object(forInfoDictionaryKey: "SUPABASE_ANON_KEY") as? String else {
-            return "" // Will trigger fatalError in SupabaseConfig
+        // Try reading from Info.plist (works with GENERATE_INFOPLIST_FILE)
+        if let key = Bundle.main.object(forInfoDictionaryKey: "SUPABASE_ANON_KEY") as? String, !key.isEmpty {
+            return key
         }
-        return key
+        
+        // Fallback: Hardcoded values (temporary - should be in Info.plist)
+        // These match the values in project.pbxproj INFOPLIST_KEY entries
+        return "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR1bHVoamtpcW9haHNoeGhpeXF6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjI5MDg3NjQsImV4cCI6MjA3ODQ4NDc2NH0.x8HqNSpYojZ6iEds6IDZyQtOTx4eswEgqWOA7mFphjg"
     }
 }
 

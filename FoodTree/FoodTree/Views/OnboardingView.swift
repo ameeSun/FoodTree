@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import CoreLocation
 
 struct OnboardingView: View {
     @EnvironmentObject var appState: AppState

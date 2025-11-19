@@ -6,10 +6,11 @@
 //
 
 import Foundation
+import Combine
 import Supabase
 
 @MainActor
-class NotificationRepository: ObservableObject {
+final class NotificationRepository: ObservableObject {
     private let supabase = SupabaseConfig.shared.client
     
     // MARK: - Fetch Notifications
@@ -20,27 +21,28 @@ class NotificationRepository: ObservableObject {
             throw NetworkError.unauthorized
         }
         
-        var query = supabase.database
+        var base = supabase.database
             .from("notifications")
-            .select()
+            .select("*")
             .eq("user_id", value: userId.uuidString)
-            .order("created_at", ascending: false)
         
-        // Apply filters
         if let filter = filter {
             switch filter {
             case .unread:
-                query = query.eq("is_read", value: false)
+                base = base.eq("is_read", value: false)
             case .posts:
-                query = query.eq("type", value: "new_post_nearby")
+                base = base.eq("type", value: "new_post_nearby")
             case .updates:
-                query = query.in("type", values: ["post_low", "post_gone", "post_expired", "post_extended"])
+                base = base.in("type", values: ["post_low", "post_gone", "post_expired", "post_extended"])
             case .all:
-                break // No additional filter
+                break
             }
         }
         
-        let dtos: [NotificationDTO] = try await query.execute().value
+        let dtos: [NotificationDTO] = try await base
+            .order("created_at", ascending: false)
+            .execute()
+            .value
         
         return dtos.compactMap { $0.toAppNotification() }
     }
@@ -54,7 +56,7 @@ class NotificationRepository: ObservableObject {
         // Verify notification belongs to user
         let notification: NotificationDTO = try await supabase.database
             .from("notifications")
-            .select()
+            .select("*")
             .eq("id", value: notificationId)
             .eq("user_id", value: userId.uuidString)
             .single()
@@ -64,7 +66,7 @@ class NotificationRepository: ObservableObject {
         // Update is_read
         try await supabase.database
             .from("notifications")
-            .update(["is_read": true, "updated_at": Date().toISO8601String()])
+            .update(["is_read": AnyCodable(true), "updated_at": AnyCodable(Date().toISO8601String())])
             .eq("id", value: notificationId)
             .execute()
         
@@ -79,7 +81,7 @@ class NotificationRepository: ObservableObject {
         
         try await supabase.database
             .from("notifications")
-            .update(["is_read": true, "updated_at": Date().toISO8601String()])
+            .update(["is_read": AnyCodable(true), "updated_at": AnyCodable(Date().toISO8601String())])
             .eq("user_id", value: userId.uuidString)
             .eq("is_read", value: false)
             .execute()
@@ -93,16 +95,14 @@ class NotificationRepository: ObservableObject {
             throw NetworkError.unauthorized
         }
         
-        // Fetch unread notification IDs and count client-side
-        let unread: [NotificationDTO] = try await supabase.database
+        let response = try await supabase.database
             .from("notifications")
-            .select("id")
+            .select("id", head: true, count: .exact)
             .eq("user_id", value: userId.uuidString)
             .eq("is_read", value: false)
             .execute()
-            .value
         
-        return unread.count
+        return response.count ?? 0
     }
 }
 

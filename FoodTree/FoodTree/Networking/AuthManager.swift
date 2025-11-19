@@ -76,6 +76,101 @@ class AuthManager: ObservableObject {
         }
     }
     
+    // MARK: - Profile Management
+
+    private struct ProfileUpdate: Encodable {
+        var role: String? = nil
+        var fullName: String? = nil
+        var dietaryPreferences: [String]? = nil
+        var searchRadiusMiles: Double? = nil
+        var updatedAt: String
+        
+        enum CodingKeys: String, CodingKey {
+            case role
+            case fullName = "full_name"
+            case dietaryPreferences = "dietary_preferences"
+            case searchRadiusMiles = "search_radius_miles"
+            case updatedAt = "updated_at"
+        }
+    }
+    
+    /// Ensure user has a profile in the database
+    private func ensureProfile() async {
+        guard let user = currentUser else { return }
+        
+        do {
+            // Try to fetch existing profile
+            if let profile: UserProfile = try? await supabase.database
+                .from("profiles")
+                .select()
+                .eq("id", value: user.id.uuidString)
+                .single()
+                .execute()
+                .value {
+                
+                self.currentProfile = profile
+                return
+            }
+            
+            // Create new profile if doesn't exist
+            let newProfile = UserProfile(
+                id: UUID(uuidString: user.id.uuidString)!,
+                email: user.email ?? "",
+                fullName: user.email?.components(separatedBy: "@").first,
+                role: "student",
+                isVerifiedOrganizer: false,
+                avatarUrl: nil,
+                dietaryPreferences: [],
+                searchRadiusMiles: 1.0,
+                notificationPreferences: ["new_posts": true, "running_low": true, "post_updates": true],
+                createdAt: Date(),
+                updatedAt: Date()
+            )
+            
+            try await supabase.database
+                .from("profiles")
+                .insert(newProfile)
+                .execute()
+            
+            self.currentProfile = newProfile
+            print("✅ Auth: Profile created for new user")
+            
+        } catch {
+            print("⚠️  Auth: Failed to ensure profile: \(error)")
+        }
+    }
+    
+    /// Update user profile
+    func updateProfile(role: String? = nil, fullName: String? = nil, dietaryPreferences: [String]? = nil, searchRadius: Double? = nil) async throws {
+        guard let userId = currentUserId else {
+            throw NetworkError.unauthorized
+        }
+        
+        let payload = ProfileUpdate(
+            role: role,
+            fullName: fullName,
+            dietaryPreferences: dietaryPreferences,
+            searchRadiusMiles: searchRadius,
+            updatedAt: Date().toISO8601String()
+        )
+        
+        do {
+            try await supabase.database
+                .from("profiles")
+                .update(payload)
+                .eq("id", value: userId.uuidString)
+                .execute()
+            
+            // Refresh profile
+            await fetchProfile()
+            
+            print("✅ Auth: Profile updated")
+        } catch {
+            print("❌ Auth: Failed to update profile: \(error)")
+            throw NetworkError.serverError(error.localizedDescription)
+        }
+    }
+    
     // MARK: - Email Authentication
     
     /// Send magic link to email (Stanford.edu only)
@@ -141,92 +236,6 @@ class AuthManager: ObservableObject {
         } catch {
             print("❌ Auth: Failed to handle callback: \(error)")
             throw NetworkError.unauthorized
-        }
-    }
-    
-    // MARK: - Profile Management
-    
-    /// Ensure user has a profile in the database
-    private func ensureProfile() async {
-        guard let user = currentUser else { return }
-        
-        do {
-            // Try to fetch existing profile
-            if let profile: UserProfile = try? await supabase.database
-                .from("profiles")
-                .select()
-                .eq("id", value: user.id.uuidString)
-                .single()
-                .execute()
-                .value {
-                
-                self.currentProfile = profile
-                return
-            }
-            
-            // Create new profile if doesn't exist
-            let newProfile = UserProfile(
-                id: UUID(uuidString: user.id.uuidString)!,
-                email: user.email ?? "",
-                fullName: user.email?.components(separatedBy: "@").first,
-                role: "student",
-                isVerifiedOrganizer: false,
-                avatarUrl: nil,
-                dietaryPreferences: [],
-                searchRadiusMiles: 1.0,
-                notificationPreferences: ["new_posts": true, "running_low": true, "post_updates": true],
-                createdAt: Date(),
-                updatedAt: Date()
-            )
-            
-            try await supabase.database
-                .from("profiles")
-                .insert(newProfile)
-                .execute()
-            
-            self.currentProfile = newProfile
-            print("✅ Auth: Profile created for new user")
-            
-        } catch {
-            print("⚠️  Auth: Failed to ensure profile: \(error)")
-        }
-    }
-    
-    /// Update user profile
-    func updateProfile(role: String? = nil, fullName: String? = nil, dietaryPreferences: [String]? = nil, searchRadius: Double? = nil) async throws {
-        guard let userId = currentUserId else {
-            throw NetworkError.unauthorized
-        }
-        
-        var updates: [String: Any] = ["updated_at": Date().toISO8601String()]
-        
-        if let role = role {
-            updates["role"] = role
-        }
-        if let name = fullName {
-            updates["full_name"] = name
-        }
-        if let dietary = dietaryPreferences {
-            updates["dietary_preferences"] = dietary
-        }
-        if let radius = searchRadius {
-            updates["search_radius_miles"] = radius
-        }
-        
-        do {
-            try await supabase.database
-                .from("profiles")
-                .update(updates)
-                .eq("id", value: userId.uuidString)
-                .execute()
-            
-            // Refresh profile
-            await fetchProfile()
-            
-            print("✅ Auth: Profile updated")
-        } catch {
-            print("❌ Auth: Failed to update profile: \(error)")
-            throw NetworkError.serverError(error.localizedDescription)
         }
     }
     

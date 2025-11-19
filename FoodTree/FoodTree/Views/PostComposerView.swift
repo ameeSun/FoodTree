@@ -159,28 +159,31 @@ struct PhotoStepView: View {
                 // Photo grid
                 if viewModel.photos.isEmpty {
                     VStack(spacing: 16) {
-                        Button(action: {
-                            showCamera = true
-                            FTHaptics.light()
-                        }) {
-                            VStack(spacing: 12) {
-                                Image(systemName: "camera.fill")
-                                    .font(.system(size: 40))
-                                    .foregroundColor(.brandPrimary)
-                                
-                                Text("Take Photo")
-                                    .font(.system(size: 16, weight: .semibold))
-                                    .foregroundColor(.inkPrimary)
+                        // Only show camera button if camera is available
+                        if UIImagePickerController.isSourceTypeAvailable(.camera) {
+                            Button(action: {
+                                showCamera = true
+                                FTHaptics.light()
+                            }) {
+                                VStack(spacing: 12) {
+                                    Image(systemName: "camera.fill")
+                                        .font(.system(size: 40))
+                                        .foregroundColor(.brandPrimary)
+                                    
+                                    Text("Take Photo")
+                                        .font(.system(size: 16, weight: .semibold))
+                                        .foregroundColor(.inkPrimary)
+                                }
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 200)
+                                .background(Color.brandPrimary.opacity(0.05))
+                                .clipShape(RoundedRectangle(cornerRadius: FTLayout.cornerRadiusCard))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: FTLayout.cornerRadiusCard)
+                                        .strokeBorder(style: StrokeStyle(lineWidth: 2, dash: [8]))
+                                        .foregroundColor(.brandPrimary.opacity(0.3))
+                                )
                             }
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 200)
-                            .background(Color.brandPrimary.opacity(0.05))
-                            .clipShape(RoundedRectangle(cornerRadius: FTLayout.cornerRadiusCard))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: FTLayout.cornerRadiusCard)
-                                    .strokeBorder(style: StrokeStyle(lineWidth: 2, dash: [8]))
-                                    .foregroundColor(.brandPrimary.opacity(0.3))
-                            )
                         }
                         
                         Button(action: {
@@ -252,27 +255,30 @@ struct PhotoStepView: View {
                                     )
                                 }
                                 
-                                Button(action: {
-                                    showCamera = true
-                                    FTHaptics.light()
-                                }) {
-                                    VStack(spacing: 8) {
-                                        Image(systemName: "camera.fill")
-                                            .font(.system(size: 24))
-                                            .foregroundColor(.brandPrimary)
-                                        
-                                        Text("Camera")
-                                            .font(.system(size: 14, weight: .medium))
-                                            .foregroundColor(.inkSecondary)
+                                // Only show camera button if camera is available
+                                if UIImagePickerController.isSourceTypeAvailable(.camera) {
+                                    Button(action: {
+                                        showCamera = true
+                                        FTHaptics.light()
+                                    }) {
+                                        VStack(spacing: 8) {
+                                            Image(systemName: "camera.fill")
+                                                .font(.system(size: 24))
+                                                .foregroundColor(.brandPrimary)
+                                            
+                                            Text("Camera")
+                                                .font(.system(size: 14, weight: .medium))
+                                                .foregroundColor(.inkSecondary)
+                                        }
+                                        .frame(maxWidth: .infinity)
+                                        .frame(height: 160)
+                                        .background(Color.bgElev2Card)
+                                        .clipShape(RoundedRectangle(cornerRadius: FTLayout.cornerRadiusPill))
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: FTLayout.cornerRadiusPill)
+                                                .strokeBorder(Color.strokeSoft, lineWidth: 2)
+                                        )
                                     }
-                                    .frame(maxWidth: .infinity)
-                                    .frame(height: 160)
-                                    .background(Color.bgElev2Card)
-                                    .clipShape(RoundedRectangle(cornerRadius: FTLayout.cornerRadiusPill))
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: FTLayout.cornerRadiusPill)
-                                            .strokeBorder(Color.strokeSoft, lineWidth: 2)
-                                    )
                                 }
                             }
                         }
@@ -974,8 +980,20 @@ struct CameraView: UIViewControllerRepresentable {
     func makeUIViewController(context: Context) -> UIImagePickerController {
         let picker = UIImagePickerController()
         picker.delegate = context.coordinator
+        
+        // Check if camera is available
+        guard UIImagePickerController.isSourceTypeAvailable(.camera) else {
+            // Camera not available (e.g., simulator) - show alert and dismiss
+            DispatchQueue.main.async {
+                print("⚠️ Camera not available on this device")
+                self.dismiss()
+            }
+            return picker
+        }
+        
         picker.sourceType = .camera
         picker.allowsEditing = false
+        picker.cameraCaptureMode = .photo
         return picker
     }
     
@@ -1000,11 +1018,15 @@ struct CameraView: UIViewControllerRepresentable {
                     }
                 }
             }
-            parent.dismiss()
+            picker.dismiss(animated: true) {
+                self.parent.dismiss()
+            }
         }
         
         func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
-            parent.dismiss()
+            picker.dismiss(animated: true) {
+                self.parent.dismiss()
+            }
         }
     }
 }

@@ -6,10 +6,13 @@
 //
 
 import Foundation
+import Observation
+import Combine
 import Supabase
 
 @MainActor
 class OrganizerRepository: ObservableObject {
+    
     private let supabase = SupabaseConfig.shared.client
     
     // MARK: - Verification Requests
@@ -24,7 +27,8 @@ class OrganizerRepository: ObservableObject {
             userId: userId.uuidString,
             orgName: orgName,
             orgDescription: description,
-            proofUrl: proofUrl
+            proofUrl: proofUrl,
+            status: nil
         )
         
         try await supabase.database

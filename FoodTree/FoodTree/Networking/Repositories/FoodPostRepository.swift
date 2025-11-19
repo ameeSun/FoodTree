@@ -8,10 +8,12 @@
 import Foundation
 import Supabase
 import CoreLocation
+import Combine
 
 @MainActor
 class FoodPostRepository: ObservableObject {
     private let supabase = SupabaseConfig.shared.client
+    let objectWillChange = PassthroughSubject<Void, Never>()
     
     // MARK: - Fetch Posts
     
@@ -48,11 +50,11 @@ class FoodPostRepository: ObservableObject {
             // We'll filter client-side for now
         }
         
-        // Order by created_at descending
-        query = query.order("created_at", ascending: false)
+        // Order by created_at descending - chain order after filters
+        let orderedQuery = query.order("created_at", ascending: false)
         
         // Execute query
-        let response: [FoodPostDTO] = try await query.execute().value
+        let response: [FoodPostDTO] = try await orderedQuery.execute().value
         
         // Convert DTOs to domain models
         var posts = response.compactMap { dto -> FoodPost? in
@@ -119,8 +121,8 @@ class FoodPostRepository: ObservableObject {
                 _ = try await supabase.storage
                     .from("food-images")
                     .upload(
-                        path: path,
-                        file: imageData,
+                        path,
+                        data: imageData,
                         options: FileOptions(contentType: "image/jpeg")
                     )
                 
@@ -201,9 +203,19 @@ class FoodPostRepository: ObservableObject {
     
     /// Adjust quantity
     func adjustQuantity(postId: String, newQuantity: Int) async throws {
+        struct UpdatePayload: Codable {
+            let quantity_estimate: Int
+            let updated_at: String
+        }
+        
+        let payload = UpdatePayload(
+            quantity_estimate: newQuantity,
+            updated_at: Date().toISO8601String()
+        )
+        
         try await supabase.database
             .from("food_posts")
-            .update(["quantity_estimate": newQuantity, "updated_at": Date().toISO8601String()])
+            .update(payload)
             .eq("id", value: postId)
             .execute()
         
