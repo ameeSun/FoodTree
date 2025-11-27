@@ -239,9 +239,19 @@ class FoodPostRepository: ObservableObject {
         
         let newExpiry = currentExpiry.addingTimeInterval(TimeInterval(additionalMinutes * 60))
         
+        struct UpdatePayload: Codable {
+            let expires_at: String
+            let updated_at: String
+        }
+        
+        let payload = UpdatePayload(
+            expires_at: newExpiry.toISO8601String(),
+            updated_at: Date().toISO8601String()
+        )
+        
         try await supabase.database
             .from("food_posts")
-            .update(["expires_at": newExpiry.toISO8601String(), "updated_at": Date().toISO8601String()])
+            .update(payload)
             .eq("id", value: postId)
             .execute()
         
@@ -249,9 +259,19 @@ class FoodPostRepository: ObservableObject {
     }
     
     private func updatePostStatus(postId: String, status: String) async throws {
+        struct UpdatePayload: Codable {
+            let status: String
+            let updated_at: String
+        }
+        
+        let payload = UpdatePayload(
+            status: status,
+            updated_at: Date().toISO8601String()
+        )
+        
         try await supabase.database
             .from("food_posts")
-            .update(["status": status, "updated_at": Date().toISO8601String()])
+            .update(payload)
             .eq("id", value: postId)
             .execute()
         
@@ -478,10 +498,21 @@ struct FoodPostDTO: Codable {
         let imageUrls = (images ?? [])
             .sorted { $0.sortOrder < $1.sortOrder }
             .compactMap { img -> String? in
-                // Generate public URL from storage path
+                // Generate public URL for storage bucket
+                // Since bucket is public, we can use the public URL endpoint
                 let baseURL = Config.supabaseURL
-                return "\(baseURL)/storage/v1/object/public/food-images/\(img.storagePath)"
+                // Properly encode the path component
+                let encodedPath = img.storagePath.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? img.storagePath
+                let url = "\(baseURL)/storage/v1/object/public/food-images/\(encodedPath)"
+                #if DEBUG
+                print("🖼️ Generated image URL: \(url)")
+                #endif
+                return url
             }
+        
+        #if DEBUG
+        print("📸 Total image URLs generated: \(imageUrls.count)")
+        #endif
         
         return FoodPost(
             id: id,

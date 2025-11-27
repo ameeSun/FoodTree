@@ -147,5 +147,33 @@ extension View {
     func ftShadow(radius: CGFloat = FTLayout.shadowRadius, opacity: Double = FTLayout.shadowOpacity) -> some View {
         modifier(FTShadow(radius: radius, opacity: opacity))
     }
+    
+    /// Conditionally apply a modifier
+    @ViewBuilder
+    func `if`<Transform: View>(_ condition: Bool, transform: (Self) -> Transform) -> some View {
+        if condition {
+            transform(self)
+        } else {
+            self
+        }
+    }
+}
+
+// MARK: - Date Extensions
+extension Date {
+    func toISO8601String() -> String {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter.string(from: self)
+    }
+}
+
+// MARK: - CLLocationCoordinate2D Extensions
+import CoreLocation
+
+extension CLLocationCoordinate2D: Equatable {
+    public static func == (lhs: CLLocationCoordinate2D, rhs: CLLocationCoordinate2D) -> Bool {
+        lhs.latitude == rhs.latitude && lhs.longitude == rhs.longitude
+    }
 }
 

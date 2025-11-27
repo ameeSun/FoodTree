@@ -6,7 +6,6 @@
 //
 
 import SwiftUI
-import PhotosUI
 import Combine
 import MapKit
 import UIKit
@@ -142,8 +141,22 @@ struct PostComposerView: View {
             return
         }
         
+        // Validate title length (database constraint: 3-200 characters)
+        let trimmedTitle = viewModel.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmedTitle.count >= 3 else {
+            publishError = "Title must be at least 3 characters long"
+            return
+        }
+        guard trimmedTitle.count <= 200 else {
+            publishError = "Title must be no more than 200 characters long"
+            return
+        }
+        
         isPublishing = true
         publishError = nil
+        
+        // Capture trimmedTitle for use in Task
+        let finalTitle = trimmedTitle
         
         Task {
             // Ensure AuthManager is synced for repository operations
@@ -174,14 +187,16 @@ struct PostComposerView: View {
                 }
                 
                 guard !imageDataArray.isEmpty else {
-                    publishError = "Please add at least one photo"
-                    isPublishing = false
+                    await MainActor.run {
+                        publishError = "Please add at least one photo"
+                        isPublishing = false
+                    }
                     return
                 }
                 
                 // Create the post request
                 let request = CreatePostRequest(
-                    title: viewModel.title,
+                    title: finalTitle,  // Use trimmed title that passed validation
                     description: viewModel.description.isEmpty ? nil : viewModel.description,
                     imageDataArray: imageDataArray,
                     dietary: dietaryStrings,
@@ -240,9 +255,7 @@ struct ProgressBar: View {
 // MARK: - Step 1: Photos
 struct PhotoStepView: View {
     @ObservedObject var viewModel: PostComposerViewModel
-    @State private var showImagePicker = false
     @State private var showCamera = false
-    @State private var selectedPhotoItems: [PhotosPickerItem] = []
     
     var body: some View {
         ScrollView {
@@ -285,26 +298,6 @@ struct PhotoStepView: View {
                                 )
                             }
                         }
-                        
-                        Button(action: {
-                            showImagePicker = true
-                            FTHaptics.light()
-                        }) {
-                            VStack(spacing: 12) {
-                                Image(systemName: "photo.on.rectangle")
-                                    .font(.system(size: 40))
-                                    .foregroundColor(.inkSecondary)
-                                
-                                Text("Choose from Library")
-                                    .font(.system(size: 16, weight: .semibold))
-                                    .foregroundColor(.inkPrimary)
-                            }
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 160)
-                            .background(Color.bgElev2Card)
-                            .clipShape(RoundedRectangle(cornerRadius: FTLayout.cornerRadiusCard))
-                            .ftShadow()
-                        }
                     }
                 } else {
                     // Show selected photos
@@ -330,9 +323,9 @@ struct PhotoStepView: View {
                             }
                         }
                         
-                        if viewModel.photos.count < 4 {
+                        if viewModel.photos.count < 3 {
                             Button(action: {
-                                showImagePicker = true
+                                showCamera = true
                                 FTHaptics.light()
                             }) {
                                 VStack(spacing: 8) {
@@ -358,29 +351,6 @@ struct PhotoStepView: View {
                 }
             }
             .padding(FTLayout.paddingM)
-        }
-        .photosPicker(
-            isPresented: $showImagePicker,
-            selection: $selectedPhotoItems,
-            maxSelectionCount: 4 - viewModel.photos.count,
-            matching: .images
-        )
-        .onChange(of: selectedPhotoItems) { newItems in
-            Task {
-                for item in newItems {
-                    if let data = try? await item.loadTransferable(type: Data.self),
-                       let image = UIImage(data: data) {
-                        await MainActor.run {
-                            if viewModel.photos.count < 4 {
-                                viewModel.photos.append(image)
-                            }
-                        }
-                    }
-                }
-                await MainActor.run {
-                    selectedPhotoItems = []
-                }
-            }
         }
         .fullScreenCover(isPresented: $showCamera) {
             CameraPicker(images: $viewModel.photos)
@@ -1047,7 +1017,10 @@ class PostComposerViewModel: ObservableObject {
     var canProceed: Bool {
         switch currentStep {
         case 1: return !photos.isEmpty
-        case 2: return !title.isEmpty
+        case 2: 
+            // Title must be 3-200 characters (database constraint)
+            let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmedTitle.count >= 3 && trimmedTitle.count <= 200
         case 3: return true
         case 4: return selectedBuilding != nil
         case 5: return agreedToGuidelines
@@ -1178,7 +1151,7 @@ struct CameraPicker: UIViewControllerRepresentable {
         
         func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey : Any]) {
             if let image = info[.originalImage] as? UIImage {
-                if parent.images.count < 4 {
+                if parent.images.count < 3 {
                     parent.images.append(image)
                 }
             }

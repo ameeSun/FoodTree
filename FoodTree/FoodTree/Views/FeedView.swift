@@ -13,7 +13,6 @@ struct FeedView: View {
     @StateObject private var viewModel = FeedViewModel()
     @StateObject private var locationManager = LocationManager()
     @State private var selectedPost: FoodPost?
-    @State private var showDetail = false
     @State private var showFilters = false
     
     var body: some View {
@@ -65,7 +64,6 @@ struct FeedView: View {
                                     userLocation: viewModel.userLocation
                                 ) {
                                     selectedPost = post
-                                    showDetail = true
                                 }
                                 .swipeActions(edge: .leading) {
                                     Button(action: {
@@ -130,10 +128,15 @@ struct FeedView: View {
                         }
                     }
             }
-            .sheet(isPresented: $showDetail) {
-                if let post = selectedPost {
-                    FoodDetailView(post: post, isPresented: $showDetail)
-                }
+            .sheet(item: $selectedPost) { post in
+                FoodDetailView(post: post, isPresented: Binding(
+                    get: { selectedPost != nil },
+                    set: { newValue in
+                        if !newValue {
+                            selectedPost = nil
+                        }
+                    }
+                ))
             }
         }
     }

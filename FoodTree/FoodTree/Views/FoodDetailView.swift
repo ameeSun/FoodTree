@@ -474,9 +474,10 @@ struct HeroGallery: View {
                 Rectangle()
                     .fill(Color.gray.opacity(0.2))
                     .overlay(
-                        Image(images[index])
-                            .resizable()
-                            .aspectRatio(contentMode: .fill)
+                        RemoteImage(
+                            urlOrAsset: images[index],
+                            contentMode: .fill
+                        )
                     )
                     .clipped()
                     .tag(index)

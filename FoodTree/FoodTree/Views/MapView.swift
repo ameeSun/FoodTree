@@ -20,21 +20,41 @@ struct MapView: View {
         span: MKCoordinateSpan(latitudeDelta: 0.02, longitudeDelta: 0.02)
     )
     
+    private var allAnnotations: [MapAnnotationItem] {
+        var annotations: [MapAnnotationItem] = viewModel.posts.map { .foodPost(FoodPostAnnotation(post: $0)) }
+        if let userLocation = locationManager.location {
+            annotations.append(.userLocation(UserLocationAnnotation(coordinate: userLocation)))
+        }
+        return annotations
+    }
+    
     var body: some View {
         ZStack(alignment: .top) {
             // Map
-            Map(coordinateRegion: $region, annotationItems: viewModel.posts) { post in
-                MapAnnotation(coordinate: post.location.coordinate) {
-                    MapPinView(post: post, isSelected: selectedPost?.id == post.id)
-                        .onTapGesture {
-                            withAnimation(FTAnimation.spring) {
-                                selectedPost = post
-                                sheetDetent = .mid
-                                region.center = post.location.coordinate
-                            }
-                            FTHaptics.light()
+            Map(coordinateRegion: $region, annotationItems: allAnnotations) { annotation in
+                let result: MapAnnotation<AnyView> = {
+                    switch annotation {
+                    case .foodPost(let postAnnotation):
+                        return MapAnnotation(coordinate: postAnnotation.coordinate) {
+                            AnyView(
+                                MapPinView(post: postAnnotation.post, isSelected: selectedPost?.id == postAnnotation.post.id)
+                                    .onTapGesture {
+                                        withAnimation(FTAnimation.spring) {
+                                            selectedPost = postAnnotation.post
+                                            sheetDetent = .mid
+                                            region.center = postAnnotation.coordinate
+                                        }
+                                        FTHaptics.light()
+                                    }
+                            )
                         }
-                }
+                    case .userLocation(let userAnnotation):
+                        return MapAnnotation(coordinate: userAnnotation.coordinate) {
+                            AnyView(UserLocationPinView())
+                        }
+                    }
+                }()
+                return result
             }
             .ignoresSafeArea()
             
@@ -192,6 +212,7 @@ struct MapView: View {
             }
         }
     }
+    
 }
 
 // MARK: - Map ViewModel

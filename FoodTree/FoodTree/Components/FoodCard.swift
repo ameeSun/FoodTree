@@ -54,11 +54,12 @@ struct FoodCard: View {
                         .fill(Color.gray.opacity(0.2))
                         .frame(height: size.imageHeight)
                         .overlay(
-                            Image(post.images.first ?? "placeholder")
-                                .resizable()
-                                .aspectRatio(contentMode: .fill)
-                                .frame(height: size.imageHeight)
-                                .clipped()
+                            RemoteImage(
+                                urlOrAsset: post.images.first ?? "placeholder",
+                                contentMode: .fill
+                            )
+                            .frame(height: size.imageHeight)
+                            .clipped()
                         )
                     
                     // Status pill overlay
