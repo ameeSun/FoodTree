@@ -1,35 +1,54 @@
 import Foundation
 import Supabase
 
+/// Configuration error for missing Supabase credentials
+enum SupabaseConfigError: LocalizedError {
+    case missingURL
+    case missingAnonKey
+    case invalidURL(String)
+    
+    var errorDescription: String? {
+        switch self {
+        case .missingURL:
+            return "Supabase URL is missing. Please configure SUPABASE_URL in Info.plist."
+        case .missingAnonKey:
+            return "Supabase anonymous key is missing. Please configure SUPABASE_ANON_KEY in Info.plist."
+        case .invalidURL(let url):
+            return "Invalid Supabase URL format: \(url)"
+        }
+    }
+}
+
 struct SupabaseConfig {
     static let shared = SupabaseConfig()
     
     let client: SupabaseClient
     
     private init() {
-        // Read from Info.plist
-        // Note: In a real app, you might want to use a more secure way to store keys if possible,
-        // but for this prototype, Info.plist or a Config struct is fine.
-        // We will use a Config struct approach for better type safety and easy swapping.
-        
-        print("🔧 DEBUG: Initializing SupabaseConfig...")
-        print("🔧 DEBUG: All Info.plist keys: \(Bundle.main.infoDictionary?.keys.sorted() ?? [])")
+        // Read configuration from Info.plist
+        // Production apps should ensure these values are set in Xcode build settings
+        // via INFOPLIST_KEY_SUPABASE_URL and INFOPLIST_KEY_SUPABASE_ANON_KEY
         
         let urlString = Config.supabaseURL
         let key = Config.supabaseAnonKey
         
-        print("🔧 DEBUG: URL String: '\(urlString)'")
-        print("🔧 DEBUG: Key length: \(key.count)")
-        
-        guard let url = URL(string: urlString), !urlString.isEmpty, !key.isEmpty else {
-            // Fallback for development/preview if keys are missing, to prevent crash
-            print("⚠️ WARNING: Supabase credentials missing. Auth will not work.")
-            print("⚠️ URL valid: \(URL(string: urlString) != nil), URL empty: \(urlString.isEmpty), Key empty: \(key.isEmpty)")
-            self.client = SupabaseClient(supabaseURL: URL(string: "https://placeholder.supabase.co")!, supabaseKey: "placeholder")
-            return
+        // Validate URL
+        guard !urlString.isEmpty else {
+            fatalError("❌ CRITICAL: Supabase URL is missing. Configure INFOPLIST_KEY_SUPABASE_URL in Xcode build settings.")
         }
         
-        print("✅ Supabase client initialized successfully with URL: \(url)")
+        guard !key.isEmpty else {
+            fatalError("❌ CRITICAL: Supabase anonymous key is missing. Configure INFOPLIST_KEY_SUPABASE_ANON_KEY in Xcode build settings.")
+        }
+        
+        guard let url = URL(string: urlString) else {
+            fatalError("❌ CRITICAL: Invalid Supabase URL format: \(urlString)")
+        }
+        
+        #if DEBUG
+        print("✅ Supabase client initialized with URL: \(url.absoluteString)")
+        #endif
+        
         self.client = SupabaseClient(
             supabaseURL: url,
             supabaseKey: key
@@ -37,32 +56,30 @@ struct SupabaseConfig {
     }
 }
 
-// Configuration helper
+// MARK: - Configuration Helper
 struct Config {
+    /// Retrieves Supabase URL from Info.plist
+    /// Checks both SUPABASE_URL and INFOPLIST_KEY_SUPABASE_URL keys
     static var supabaseURL: String {
-        // Try to read from Info.plist first
+        // Try to read from Info.plist
+        // Xcode automatically prefixes keys with INFOPLIST_KEY_ when set in build settings
         let url = Bundle.main.object(forInfoDictionaryKey: "SUPABASE_URL") as? String 
             ?? Bundle.main.object(forInfoDictionaryKey: "INFOPLIST_KEY_SUPABASE_URL") as? String 
             ?? ""
         
-        // If Info.plist doesn't have it, use hardcoded value
-        let finalURL = url.isEmpty ? "https://duluhjkiqoahshxhiyqz.supabase.co" : url
-        
-        print("🔍 DEBUG: SUPABASE_URL = '\(finalURL)'")
-        return finalURL
+        return url
     }
     
+    /// Retrieves Supabase anonymous key from Info.plist
+    /// Checks both SUPABASE_ANON_KEY and INFOPLIST_KEY_SUPABASE_ANON_KEY keys
     static var supabaseAnonKey: String {
-        // Try to read from Info.plist first
+        // Try to read from Info.plist
+        // Xcode automatically prefixes keys with INFOPLIST_KEY_ when set in build settings
         let key = Bundle.main.object(forInfoDictionaryKey: "SUPABASE_ANON_KEY") as? String 
             ?? Bundle.main.object(forInfoDictionaryKey: "INFOPLIST_KEY_SUPABASE_ANON_KEY") as? String 
             ?? ""
         
-        // If Info.plist doesn't have it, use hardcoded value
-        let finalKey = key.isEmpty ? "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR1bHVoamtpcW9haHNoeGhpeXF6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjI5MDg3NjQsImV4cCI6MjA3ODQ4NDc2NH0.x8HqNSpYojZ6iEds6IDZyQtOTx4eswEgqWOA7mFphjg" : key
-        
-        print("🔍 DEBUG: SUPABASE_ANON_KEY = '\(finalKey.prefix(20))...'")
-        return finalKey
+        return key
     }
 }
 

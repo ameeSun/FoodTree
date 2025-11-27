@@ -9,9 +9,11 @@ import SwiftUI
 
 struct RootTabView: View {
     @EnvironmentObject var appState: AppState
+    @StateObject private var authService = AuthService.shared
     @State private var selectedTab: Tab = .map
     @State private var showPostComposer = false
     @State private var scrollOffset: CGFloat = 0
+    @State private var studentPostToast: Toast?
     
     enum Tab: String, CaseIterable {
         case map = "Map"
@@ -70,7 +72,18 @@ struct RootTabView: View {
                             // Center FAB
                             Button(action: {
                                 FTHaptics.light()
-                                showPostComposer = true
+                                
+                                // Check if user is an organizer/administrator
+                                if let user = authService.currentUser, user.role == .organizer {
+                                    showPostComposer = true
+                                } else {
+                                    // Show message for students
+                                    studentPostToast = Toast(
+                                        message: "You are a student and unable to post. Only administrators can create food posts.",
+                                        type: .warning,
+                                        duration: 4.0
+                                    )
+                                }
                             }) {
                                 ZStack {
                                     Circle()
@@ -112,6 +125,7 @@ struct RootTabView: View {
         .fullScreenCover(isPresented: $showPostComposer) {
             PostComposerView(isPresented: $showPostComposer)
         }
+        .toast($studentPostToast)
         .ignoresSafeArea(.keyboard)
     }
 }

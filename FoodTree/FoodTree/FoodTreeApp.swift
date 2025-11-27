@@ -72,5 +72,14 @@ class AppState: ObservableObject {
 enum UserRole: String, CaseIterable, Codable {
     case student = "student"
     case organizer = "organizer"
+    
+    var displayName: String {
+        switch self {
+        case .student:
+            return "Student"
+        case .organizer:
+            return "Administrator"
+        }
+    }
 }
 

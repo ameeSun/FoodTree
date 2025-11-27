@@ -134,6 +134,12 @@ struct PostComposerView: View {
             return
         }
         
+        // Check if user has permission to post (only organizers/administrators can post)
+        guard let profile = AuthManager.shared.currentProfile, profile.role == .organizer else {
+            publishError = "You are a student and unable to post. Only administrators can create food posts."
+            return
+        }
+        
         isPublishing = true
         publishError = nil
         

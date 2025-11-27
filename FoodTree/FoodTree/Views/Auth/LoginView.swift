@@ -93,7 +93,7 @@ struct LoginView: View {
                                 )
                                 
                                 RoleButton(
-                                    title: "Organizer",
+                                    title: "Administrator",
                                     icon: "person.3.fill",
                                     isSelected: selectedRole == .organizer,
                                     action: { selectedRole = .organizer }
