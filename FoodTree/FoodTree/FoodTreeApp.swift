@@ -31,13 +31,17 @@ struct FoodTreeApp: App {
             }
             .onAppear {
                 // Sync auth state role to app state if needed
-                if let user = authService.currentUser {
-                    appState.userRole = user.role
+                Task { @MainActor in
+                    if let user = authService.currentUser {
+                        appState.userRole = user.role
+                    }
                 }
             }
             .onChange(of: authService.currentUser) { user in
-                if let user = user {
-                    appState.userRole = user.role
+                Task { @MainActor in
+                    if let user = user {
+                        appState.userRole = user.role
+                    }
                 }
             }
         }

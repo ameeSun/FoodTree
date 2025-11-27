@@ -9,6 +9,7 @@ import SwiftUI
 import PhotosUI
 import Combine
 import MapKit
+import UIKit
 
 struct PostComposerView: View {
     @Binding var isPresented: Bool
@@ -128,14 +129,15 @@ struct PostComposerView: View {
             return
         }
         
-        // Check if user is authenticated and has a valid user ID
-        guard AuthManager.shared.isAuthenticated, AuthManager.shared.currentUserId != nil else {
+        // Check if user is authenticated
+        guard AuthService.shared.isAuthenticated else {
             publishError = "You must be logged in to post food. Please sign in and try again."
             return
         }
         
         // Check if user has permission to post (only organizers/administrators can post)
-        guard let profile = AuthManager.shared.currentProfile, profile.role == .organizer else {
+        // Use AuthService which is the primary auth system used throughout the app
+        guard let user = AuthService.shared.currentUser, user.role == .organizer else {
             publishError = "You are a student and unable to post. Only administrators can create food posts."
             return
         }
@@ -144,6 +146,20 @@ struct PostComposerView: View {
         publishError = nil
         
         Task {
+            // Ensure AuthManager is synced for repository operations
+            if AuthManager.shared.currentUserId == nil {
+                await AuthManager.shared.checkSession()
+            }
+            
+            // Double-check AuthManager has user ID after sync
+            guard AuthManager.shared.currentUserId != nil else {
+                await MainActor.run {
+                    isPublishing = false
+                    publishError = "Unable to verify user identity. Please try again."
+                }
+                return
+            }
+            
             do {
                 // Calculate expiry time
                 let expiresAt = Calendar.current.date(byAdding: .minute, value: viewModel.expiryMinutes, to: Date())
@@ -151,10 +167,17 @@ struct PostComposerView: View {
                 // Convert dietary tags to strings
                 let dietaryStrings = viewModel.dietaryTags.map { $0.rawValue }
                 
-                // For now, create placeholder image data (1x1 pixel JPEG)
-                // TODO: Replace with actual image data when real image picker is implemented
-                let placeholderImageData = createPlaceholderImageData()
-                let imageDataArray = Array(repeating: placeholderImageData, count: viewModel.photos.count)
+                // Convert UIImage to JPEG data
+                let imageDataArray = viewModel.photos.compactMap { image -> Data? in
+                    // Compress image to reasonable size (max 2MB per image)
+                    return image.jpegData(compressionQuality: 0.8)
+                }
+                
+                guard !imageDataArray.isEmpty else {
+                    publishError = "Please add at least one photo"
+                    isPublishing = false
+                    return
+                }
                 
                 // Create the post request
                 let request = CreatePostRequest(
@@ -195,28 +218,6 @@ struct PostComposerView: View {
         }
     }
     
-    // Create a minimal placeholder JPEG image (1x1 pixel)
-    private func createPlaceholderImageData() -> Data {
-        // Minimal valid JPEG header for a 1x1 pixel image
-        let jpegHeader: [UInt8] = [
-            0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0x4A, 0x46, 0x49, 0x46, 0x00, 0x01,
-            0x01, 0x01, 0x00, 0x48, 0x00, 0x48, 0x00, 0x00, 0xFF, 0xDB, 0x00, 0x43,
-            0x00, 0x08, 0x06, 0x06, 0x07, 0x06, 0x05, 0x08, 0x07, 0x07, 0x07, 0x09,
-            0x09, 0x08, 0x0A, 0x0C, 0x14, 0x0D, 0x0C, 0x0B, 0x0B, 0x0C, 0x19, 0x12,
-            0x13, 0x0F, 0x14, 0x1D, 0x1A, 0x1F, 0x1E, 0x1D, 0x1A, 0x1C, 0x1C, 0x20,
-            0x24, 0x2E, 0x27, 0x20, 0x22, 0x2C, 0x23, 0x1C, 0x1C, 0x28, 0x37, 0x29,
-            0x2C, 0x30, 0x31, 0x34, 0x34, 0x34, 0x1F, 0x27, 0x39, 0x3D, 0x38, 0x32,
-            0x3C, 0x2E, 0x33, 0x34, 0x32, 0xFF, 0xC0, 0x00, 0x11, 0x08, 0x00, 0x01,
-            0x00, 0x01, 0x01, 0x01, 0x11, 0x00, 0x02, 0x11, 0x01, 0x03, 0x11, 0x01,
-            0xFF, 0xC4, 0x00, 0x14, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x08, 0xFF,
-            0xC4, 0x00, 0x14, 0x10, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xFF, 0xDA, 0x00,
-            0x0C, 0x03, 0x01, 0x00, 0x02, 0x11, 0x03, 0x11, 0x00, 0x3F, 0x00, 0x9F,
-            0xFF, 0xD9
-        ]
-        return Data(jpegHeader)
-    }
 }
 
 // MARK: - Progress Bar
@@ -241,6 +242,7 @@ struct PhotoStepView: View {
     @ObservedObject var viewModel: PostComposerViewModel
     @State private var showImagePicker = false
     @State private var showCamera = false
+    @State private var selectedPhotoItems: [PhotosPickerItem] = []
     
     var body: some View {
         ScrollView {
@@ -258,28 +260,30 @@ struct PhotoStepView: View {
                 // Photo grid
                 if viewModel.photos.isEmpty {
                     VStack(spacing: 16) {
-                        Button(action: {
-                            showCamera = true
-                            FTHaptics.light()
-                        }) {
-                            VStack(spacing: 12) {
-                                Image(systemName: "camera.fill")
-                                    .font(.system(size: 40))
-                                    .foregroundColor(.brandPrimary)
-                                
-                                Text("Take Photo")
-                                    .font(.system(size: 16, weight: .semibold))
-                                    .foregroundColor(.inkPrimary)
+                        if UIImagePickerController.isSourceTypeAvailable(.camera) {
+                            Button(action: {
+                                showCamera = true
+                                FTHaptics.light()
+                            }) {
+                                VStack(spacing: 12) {
+                                    Image(systemName: "camera.fill")
+                                        .font(.system(size: 40))
+                                        .foregroundColor(.brandPrimary)
+                                    
+                                    Text("Take Photo")
+                                        .font(.system(size: 16, weight: .semibold))
+                                        .foregroundColor(.inkPrimary)
+                                }
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 200)
+                                .background(Color.brandPrimary.opacity(0.05))
+                                .clipShape(RoundedRectangle(cornerRadius: FTLayout.cornerRadiusCard))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: FTLayout.cornerRadiusCard)
+                                        .strokeBorder(style: StrokeStyle(lineWidth: 2, dash: [8]))
+                                        .foregroundColor(.brandPrimary.opacity(0.3))
+                                )
                             }
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 200)
-                            .background(Color.brandPrimary.opacity(0.05))
-                            .clipShape(RoundedRectangle(cornerRadius: FTLayout.cornerRadiusCard))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: FTLayout.cornerRadiusCard)
-                                    .strokeBorder(style: StrokeStyle(lineWidth: 2, dash: [8]))
-                                    .foregroundColor(.brandPrimary.opacity(0.3))
-                            )
                         }
                         
                         Button(action: {
@@ -307,8 +311,9 @@ struct PhotoStepView: View {
                     LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
                         ForEach(viewModel.photos.indices, id: \.self) { index in
                             ZStack(alignment: .topTrailing) {
-                                Rectangle()
-                                    .fill(Color.gray.opacity(0.2))
+                                Image(uiImage: viewModel.photos[index])
+                                    .resizable()
+                                    .aspectRatio(contentMode: .fill)
                                     .frame(height: 160)
                                     .clipShape(RoundedRectangle(cornerRadius: FTLayout.cornerRadiusPill))
                                 
@@ -354,8 +359,31 @@ struct PhotoStepView: View {
             }
             .padding(FTLayout.paddingM)
         }
-        .sheet(isPresented: $showImagePicker) {
-            ImagePicker(images: $viewModel.photos)
+        .photosPicker(
+            isPresented: $showImagePicker,
+            selection: $selectedPhotoItems,
+            maxSelectionCount: 4 - viewModel.photos.count,
+            matching: .images
+        )
+        .onChange(of: selectedPhotoItems) { newItems in
+            Task {
+                for item in newItems {
+                    if let data = try? await item.loadTransferable(type: Data.self),
+                       let image = UIImage(data: data) {
+                        await MainActor.run {
+                            if viewModel.photos.count < 4 {
+                                viewModel.photos.append(image)
+                            }
+                        }
+                    }
+                }
+                await MainActor.run {
+                    selectedPhotoItems = []
+                }
+            }
+        }
+        .fullScreenCover(isPresented: $showCamera) {
+            CameraPicker(images: $viewModel.photos)
         }
     }
 }
@@ -866,21 +894,48 @@ struct ReviewStepView: View {
                 
                 // Preview card
                 VStack(alignment: .leading, spacing: 16) {
-                    // Fake image preview
-                    Rectangle()
-                        .fill(Color.brandPrimary.opacity(0.1))
-                        .frame(height: 180)
-                        .clipShape(RoundedRectangle(cornerRadius: FTLayout.cornerRadiusCard))
-                        .overlay(
-                            VStack {
-                                Image(systemName: "photo")
-                                    .font(.system(size: 40))
-                                    .foregroundColor(.brandPrimary.opacity(0.3))
-                                Text("\(viewModel.photos.count) photo\(viewModel.photos.count == 1 ? "" : "s")")
-                                    .font(.system(size: 14))
-                                    .foregroundColor(.inkMuted)
-                            }
-                        )
+                    // Image preview
+                    if let firstImage = viewModel.photos.first {
+                        Image(uiImage: firstImage)
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                            .frame(height: 180)
+                            .clipShape(RoundedRectangle(cornerRadius: FTLayout.cornerRadiusCard))
+                            .overlay(
+                                Group {
+                                    if viewModel.photos.count > 1 {
+                                        VStack {
+                                            Spacer()
+                                            HStack {
+                                                Spacer()
+                                                Text("+\(viewModel.photos.count - 1) more")
+                                                    .font(.system(size: 14, weight: .semibold))
+                                                    .foregroundColor(.white)
+                                                    .padding(8)
+                                                    .background(Color.black.opacity(0.6))
+                                                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                                                    .padding(12)
+                                            }
+                                        }
+                                    }
+                                }
+                            )
+                    } else {
+                        Rectangle()
+                            .fill(Color.brandPrimary.opacity(0.1))
+                            .frame(height: 180)
+                            .clipShape(RoundedRectangle(cornerRadius: FTLayout.cornerRadiusCard))
+                            .overlay(
+                                VStack {
+                                    Image(systemName: "photo")
+                                        .font(.system(size: 40))
+                                        .foregroundColor(.brandPrimary.opacity(0.3))
+                                    Text("No photos")
+                                        .font(.system(size: 14))
+                                        .foregroundColor(.inkMuted)
+                                }
+                            )
+                    }
                     
                     Text(viewModel.title)
                         .font(.system(size: 20, weight: .semibold))
@@ -977,7 +1032,7 @@ struct ReviewStepView: View {
 // MARK: - Post Composer ViewModel
 class PostComposerViewModel: ObservableObject {
     @Published var currentStep = 1
-    @Published var photos: [String] = []
+    @Published var photos: [UIImage] = []
     @Published var title = ""
     @Published var description = ""
     @Published var dietaryTags: Set<DietaryTag> = []
@@ -1094,32 +1149,44 @@ struct PostSuccessView: View {
     }
 }
 
-// MARK: - Image Picker Stub
-struct ImagePicker: View {
-    @Binding var images: [String]
+// MARK: - Camera Picker
+struct CameraPicker: UIViewControllerRepresentable {
+    @Binding var images: [UIImage]
     @Environment(\.dismiss) var dismiss
     
-    var body: some View {
-        NavigationView {
-            VStack {
-                Text("Photo picker would appear here")
-                    .foregroundColor(.inkSecondary)
-                
-                Button("Add Mock Photo") {
-                    images.append("mock_photo_\(images.count)")
-                    FTHaptics.light()
-                    dismiss()
+    func makeUIViewController(context: Context) -> UIImagePickerController {
+        let picker = UIImagePickerController()
+        picker.delegate = context.coordinator
+        picker.sourceType = .camera
+        picker.allowsEditing = false
+        picker.cameraCaptureMode = .photo
+        return picker
+    }
+    
+    func updateUIViewController(_ uiViewController: UIImagePickerController, context: Context) {}
+    
+    func makeCoordinator() -> Coordinator {
+        Coordinator(self)
+    }
+    
+    class Coordinator: NSObject, UIImagePickerControllerDelegate, UINavigationControllerDelegate {
+        let parent: CameraPicker
+        
+        init(_ parent: CameraPicker) {
+            self.parent = parent
+        }
+        
+        func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey : Any]) {
+            if let image = info[.originalImage] as? UIImage {
+                if parent.images.count < 4 {
+                    parent.images.append(image)
                 }
-                .padding()
             }
-            .navigationTitle("Select Photos")
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") {
-                        dismiss()
-                    }
-                }
-            }
+            parent.dismiss()
+        }
+        
+        func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
+            parent.dismiss()
         }
     }
 }

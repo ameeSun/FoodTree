@@ -173,14 +173,18 @@ struct MapView: View {
                 await viewModel.loadPosts(locationManager: locationManager)
                 // Update map region when location is available
                 if let location = locationManager.location {
-                    region.center = location
+                    await MainActor.run {
+                        region.center = location
+                    }
                 }
             }
         }
         .onChange(of: locationManager.location) { newLocation in
             if let location = newLocation {
                 // Update map region to user location
-                region.center = location
+                Task { @MainActor in
+                    region.center = location
+                }
                 // Reload posts with new location
                 Task {
                     await viewModel.loadPosts(locationManager: locationManager)
