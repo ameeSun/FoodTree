@@ -127,7 +127,17 @@ struct ProfileView: View {
                         
                         SettingsSection(title: "Account") {
                             SettingsRow(icon: "checkmark.seal", title: "Verify as organizer", value: nil, highlighted: appState.userRole == .organizer)
-                            SettingsRow(icon: "arrow.right.square", title: "Sign Out", value: nil, destructive: true)
+                            SettingsRow(
+                                icon: "arrow.right.square",
+                                title: "Sign Out",
+                                value: nil,
+                                destructive: true,
+                                action: {
+                                    Task {
+                                        await AuthService.shared.signOut()
+                                    }
+                                }
+                            )
                         }
                     }
                     .padding(.horizontal, FTLayout.paddingM)
@@ -205,10 +215,12 @@ struct SettingsRow: View {
     let value: String?
     var highlighted: Bool = false
     var destructive: Bool = false
+    var action: (() -> Void)? = nil
     
     var body: some View {
         Button(action: {
             FTHaptics.light()
+            action?()
         }) {
             HStack(spacing: 12) {
                 Image(systemName: icon)

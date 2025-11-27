@@ -479,7 +479,8 @@ struct FoodPostDTO: Codable {
             .sorted { $0.sortOrder < $1.sortOrder }
             .compactMap { img -> String? in
                 // Generate public URL from storage path
-                return "https://duluhjkiqoahshxhiyqz.supabase.co/storage/v1/object/public/food-images/\(img.storagePath)"
+                let baseURL = Config.supabaseURL
+                return "\(baseURL)/storage/v1/object/public/food-images/\(img.storagePath)"
             }
         
         return FoodPost(

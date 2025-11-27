@@ -261,7 +261,7 @@ serve(async (req) => {
  *    
  *    select cron.schedule(
  *      'analytics-daily-at-midnight',
- *      '0 0 * * *',  -- Daily at midnight UTC
+ *      '0 0 * * *',  // Daily at midnight UTC
  *      $$
  *      select net.http_post(
  *        url := 'https://duluhjkiqoahshxhiyqz.supabase.co/functions/v1/analytics_daily',

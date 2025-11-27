@@ -8,11 +8,15 @@
 import SwiftUI
 import PhotosUI
 import Combine
+import MapKit
 
 struct PostComposerView: View {
     @Binding var isPresented: Bool
     @StateObject private var viewModel = PostComposerViewModel()
+    @StateObject private var repository = FoodPostRepository()
     @State private var showSuccessView = false
+    @State private var isPublishing = false
+    @State private var publishError: String?
     
     var body: some View {
         NavigationView {
@@ -70,15 +74,22 @@ struct PostComposerView: View {
                                 FTHaptics.light()
                             }
                         }) {
-                            Text(viewModel.currentStep == 5 ? "Publish" : "Next")
-                                .font(.system(size: 16, weight: .semibold))
-                                .foregroundColor(.white)
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 16)
-                                .background(viewModel.canProceed ? Color.brandPrimary : Color.inkMuted)
-                                .clipShape(RoundedRectangle(cornerRadius: FTLayout.cornerRadiusButton))
+                            HStack {
+                                if isPublishing {
+                                    ProgressView()
+                                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                        .scaleEffect(0.8)
+                                }
+                                Text(viewModel.currentStep == 5 ? (isPublishing ? "Publishing..." : "Publish") : "Next")
+                                    .font(.system(size: 16, weight: .semibold))
+                            }
+                            .foregroundColor(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 16)
+                            .background((viewModel.canProceed && !isPublishing) ? Color.brandPrimary : Color.inkMuted)
+                            .clipShape(RoundedRectangle(cornerRadius: FTLayout.cornerRadiusButton))
                         }
-                        .disabled(!viewModel.canProceed)
+                        .disabled(!viewModel.canProceed || isPublishing)
                     }
                     .padding(FTLayout.paddingM)
                     .background(Color.bgElev2Card.ignoresSafeArea())
@@ -102,11 +113,103 @@ struct PostComposerView: View {
         .fullScreenCover(isPresented: $showSuccessView) {
             PostSuccessView(isPresented: $isPresented)
         }
+        .alert("Error", isPresented: .constant(publishError != nil)) {
+            Button("OK") {
+                publishError = nil
+            }
+        } message: {
+            Text(publishError ?? "")
+        }
     }
     
     private func publishPost() {
-        FTHaptics.success()
-        showSuccessView = true
+        guard let location = viewModel.location else {
+            publishError = "Location is required"
+            return
+        }
+        
+        // Check if user is authenticated and has a valid user ID
+        guard AuthManager.shared.isAuthenticated, AuthManager.shared.currentUserId != nil else {
+            publishError = "You must be logged in to post food. Please sign in and try again."
+            return
+        }
+        
+        isPublishing = true
+        publishError = nil
+        
+        Task {
+            do {
+                // Calculate expiry time
+                let expiresAt = Calendar.current.date(byAdding: .minute, value: viewModel.expiryMinutes, to: Date())
+                
+                // Convert dietary tags to strings
+                let dietaryStrings = viewModel.dietaryTags.map { $0.rawValue }
+                
+                // For now, create placeholder image data (1x1 pixel JPEG)
+                // TODO: Replace with actual image data when real image picker is implemented
+                let placeholderImageData = createPlaceholderImageData()
+                let imageDataArray = Array(repeating: placeholderImageData, count: viewModel.photos.count)
+                
+                // Create the post request
+                let request = CreatePostRequest(
+                    title: viewModel.title,
+                    description: viewModel.description.isEmpty ? nil : viewModel.description,
+                    imageDataArray: imageDataArray,
+                    dietary: dietaryStrings,
+                    perishability: viewModel.perishability,
+                    quantityEstimate: viewModel.quantity,
+                    expiresAt: expiresAt,
+                    location: location,
+                    buildingId: nil, // TODO: Get building ID from selected building
+                    buildingName: viewModel.selectedBuilding,
+                    pickupInstructions: viewModel.accessNotes.isEmpty ? nil : viewModel.accessNotes
+                )
+                
+                // Create the post
+                _ = try await repository.createPost(input: request)
+                
+                // Success!
+                await MainActor.run {
+                    FTHaptics.success()
+                    isPublishing = false
+                    showSuccessView = true
+                }
+            } catch {
+                await MainActor.run {
+                    isPublishing = false
+                    // Use localized error description if available, otherwise fall back to description
+                    if let networkError = error as? NetworkError {
+                        publishError = networkError.errorDescription ?? networkError.localizedDescription
+                    } else {
+                        publishError = error.localizedDescription
+                    }
+                    print("❌ Failed to publish post: \(error)")
+                }
+            }
+        }
+    }
+    
+    // Create a minimal placeholder JPEG image (1x1 pixel)
+    private func createPlaceholderImageData() -> Data {
+        // Minimal valid JPEG header for a 1x1 pixel image
+        let jpegHeader: [UInt8] = [
+            0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0x4A, 0x46, 0x49, 0x46, 0x00, 0x01,
+            0x01, 0x01, 0x00, 0x48, 0x00, 0x48, 0x00, 0x00, 0xFF, 0xDB, 0x00, 0x43,
+            0x00, 0x08, 0x06, 0x06, 0x07, 0x06, 0x05, 0x08, 0x07, 0x07, 0x07, 0x09,
+            0x09, 0x08, 0x0A, 0x0C, 0x14, 0x0D, 0x0C, 0x0B, 0x0B, 0x0C, 0x19, 0x12,
+            0x13, 0x0F, 0x14, 0x1D, 0x1A, 0x1F, 0x1E, 0x1D, 0x1A, 0x1C, 0x1C, 0x20,
+            0x24, 0x2E, 0x27, 0x20, 0x22, 0x2C, 0x23, 0x1C, 0x1C, 0x28, 0x37, 0x29,
+            0x2C, 0x30, 0x31, 0x34, 0x34, 0x34, 0x1F, 0x27, 0x39, 0x3D, 0x38, 0x32,
+            0x3C, 0x2E, 0x33, 0x34, 0x32, 0xFF, 0xC0, 0x00, 0x11, 0x08, 0x00, 0x01,
+            0x00, 0x01, 0x01, 0x01, 0x11, 0x00, 0x02, 0x11, 0x01, 0x03, 0x11, 0x01,
+            0xFF, 0xC4, 0x00, 0x14, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x08, 0xFF,
+            0xC4, 0x00, 0x14, 0x10, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xFF, 0xDA, 0x00,
+            0x0C, 0x03, 0x01, 0x00, 0x02, 0x11, 0x03, 0x11, 0x00, 0x3F, 0x00, 0x9F,
+            0xFF, 0xD9
+        ]
+        return Data(jpegHeader)
     }
 }
 
@@ -443,7 +546,7 @@ struct QuantityStepView: View {
         }
     }
     
-    private func perishabilityDescription(_ level: FoodPost.Perishability) -> String {
+    func perishabilityDescription(_ level: FoodPost.Perishability) -> String {
         switch level {
         case .low: return "Packaged, dry goods, or shelf-stable"
         case .medium: return "Should be consumed within an hour"
@@ -455,7 +558,13 @@ struct QuantityStepView: View {
 // MARK: - Step 4: Location
 struct LocationStepView: View {
     @ObservedObject var viewModel: PostComposerViewModel
+    @StateObject private var locationManager = LocationManager()
+    @StateObject private var searchService = LocationSearchService()
     @State private var searchText = ""
+    @State private var showResults = false
+    @State private var isReverseGeocoding = false
+    @State private var searchTask: Task<Void, Never>?
+    @State private var hasInitializedLocation = false
     
     var body: some View {
         ScrollView {
@@ -470,60 +579,140 @@ struct LocationStepView: View {
                         .foregroundColor(.inkSecondary)
                 }
                 
-                // Building search
+                // Building search with dropdown
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Building")
                         .font(.system(size: 15, weight: .semibold))
                         .foregroundColor(.inkSecondary)
                     
-                    TextField("Search buildings", text: $searchText)
-                        .font(.system(size: 17))
-                        .padding(16)
-                        .background(Color.bgElev2Card)
-                        .clipShape(RoundedRectangle(cornerRadius: FTLayout.cornerRadiusPill))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: FTLayout.cornerRadiusPill)
-                                .strokeBorder(Color.strokeSoft, lineWidth: 1)
-                        )
-                }
-                
-                // Building suggestions
-                VStack(spacing: 8) {
-                    ForEach(filteredBuildings, id: \.name) { building in
-                        Button(action: {
-                            viewModel.selectedBuilding = building.name
-                            viewModel.location = building.coordinate
-                            searchText = building.name
-                            FTHaptics.light()
-                        }) {
-                            HStack {
-                                Image(systemName: "building.2.fill")
-                                    .font(.system(size: 18))
-                                    .foregroundColor(.brandPrimary)
-                                
-                                Text(building.name)
-                                    .font(.system(size: 16))
-                                    .foregroundColor(.inkPrimary)
-                                
-                                Spacer()
-                                
-                                if viewModel.selectedBuilding == building.name {
-                                    Image(systemName: "checkmark")
-                                        .foregroundColor(.brandPrimary)
+                    ZStack(alignment: .topLeading) {
+                        VStack(spacing: 0) {
+                            TextField("Search buildings", text: $searchText)
+                                .font(.system(size: 17))
+                                .padding(16)
+                                .background(Color.bgElev2Card)
+                                .clipShape(RoundedRectangle(cornerRadius: FTLayout.cornerRadiusPill))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: FTLayout.cornerRadiusPill)
+                                        .strokeBorder(Color.strokeSoft, lineWidth: 1)
+                                )
+                                .onTapGesture {
+                                    showResults = true
                                 }
+                                .onChange(of: searchText) { newValue in
+                                    performSearch(query: newValue)
+                                }
+                            
+                            // Dropdown results
+                            if showResults && !searchText.isEmpty {
+                                VStack(spacing: 0) {
+                                    if searchService.isSearching {
+                                        HStack {
+                                            ProgressView()
+                                                .scaleEffect(0.8)
+                                            Text("Searching...")
+                                                .font(.system(size: 15))
+                                                .foregroundColor(.inkSecondary)
+                                        }
+                                        .padding(16)
+                                        .background(Color.bgElev2Card)
+                                    } else if searchService.searchResults.isEmpty && !searchText.isEmpty {
+                                        Text("No results found")
+                                            .font(.system(size: 15))
+                                            .foregroundColor(.inkSecondary)
+                                            .padding(16)
+                                            .background(Color.bgElev2Card)
+                                    } else {
+                                        ForEach(Array(searchService.searchResults.prefix(5)), id: \.self) { mapItem in
+                                            Button(action: {
+                                                selectLocation(mapItem: mapItem)
+                                            }) {
+                                                HStack(spacing: 12) {
+                                                    Image(systemName: "mappin.circle.fill")
+                                                        .font(.system(size: 20))
+                                                        .foregroundColor(.brandPrimary)
+                                                    
+                                                    VStack(alignment: .leading, spacing: 2) {
+                                                        Text(mapItem.name ?? "Unknown")
+                                                            .font(.system(size: 16, weight: .medium))
+                                                            .foregroundColor(.inkPrimary)
+                                                        
+                                                        if let address = mapItem.placemark.thoroughfare {
+                                                            Text(address)
+                                                                .font(.system(size: 14))
+                                                                .foregroundColor(.inkSecondary)
+                                                        }
+                                                    }
+                                                    
+                                                    Spacer()
+                                                }
+                                                .padding(16)
+                                                .background(
+                                                    viewModel.selectedBuilding == mapItem.name ? 
+                                                    Color.brandPrimary.opacity(0.1) : Color.bgElev2Card
+                                                )
+                                            }
+                                            .buttonStyle(PlainButtonStyle())
+                                            
+                                            if mapItem != searchService.searchResults.prefix(5).last {
+                                                Divider()
+                                                    .padding(.leading, 48)
+                                            }
+                                        }
+                                    }
+                                }
+                                .background(Color.bgElev2Card)
+                                .clipShape(RoundedRectangle(cornerRadius: FTLayout.cornerRadiusPill))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: FTLayout.cornerRadiusPill)
+                                        .strokeBorder(Color.strokeSoft, lineWidth: 1)
+                                )
+                                .shadow(color: .black.opacity(0.1), radius: 8, x: 0, y: 4)
+                                .padding(.top, 8)
                             }
-                            .padding(16)
-                            .background(Color.bgElev2Card)
-                            .clipShape(RoundedRectangle(cornerRadius: FTLayout.cornerRadiusPill))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: FTLayout.cornerRadiusPill)
-                                    .strokeBorder(
-                                        viewModel.selectedBuilding == building.name ? Color.brandPrimary : Color.strokeSoft,
-                                        lineWidth: 1
-                                    )
-                            )
                         }
                     }
+                }
+                
+                // Show loading state for reverse geocoding
+                if isReverseGeocoding {
+                    HStack {
+                        ProgressView()
+                            .scaleEffect(0.8)
+                        Text("Getting your location...")
+                            .font(.system(size: 15))
+                            .foregroundColor(.inkSecondary)
+                    }
+                    .padding(.vertical, 8)
+                }
+                
+                // Show selected location info
+                if let building = viewModel.selectedBuilding, viewModel.location != nil {
+                    HStack(spacing: 8) {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundColor(.brandPrimary)
+                        Text(building)
+                            .font(.system(size: 15, weight: .medium))
+                            .foregroundColor(.inkPrimary)
+                        Spacer()
+                    }
+                    .padding(12)
+                    .background(Color.brandPrimary.opacity(0.1))
+                    .clipShape(RoundedRectangle(cornerRadius: FTLayout.cornerRadiusPill))
+                }
+                
+                // Show error if location unavailable
+                if locationManager.authorizationStatus == .denied || locationManager.authorizationStatus == .restricted {
+                    HStack(spacing: 8) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundColor(.orange)
+                        Text("Location access denied. Please enable location services in Settings.")
+                            .font(.system(size: 14))
+                            .foregroundColor(.inkSecondary)
+                    }
+                    .padding(12)
+                    .background(Color.orange.opacity(0.1))
+                    .clipShape(RoundedRectangle(cornerRadius: FTLayout.cornerRadiusPill))
                 }
                 
                 Divider()
@@ -548,14 +737,107 @@ struct LocationStepView: View {
             }
             .padding(FTLayout.paddingM)
         }
+        .onAppear {
+            if !hasInitializedLocation {
+                initializeLocation()
+            }
+        }
+        .onChange(of: locationManager.location) { newLocation in
+            if newLocation != nil, !hasInitializedLocation {
+                initializeLocation()
+            }
+        }
+        .onTapGesture {
+            // Dismiss dropdown when tapping outside
+            showResults = false
+        }
     }
     
-    private var filteredBuildings: [StanfordBuilding] {
-        if searchText.isEmpty {
-            return MockData.buildings
-        } else {
-            return MockData.buildings.filter { $0.name.localizedCaseInsensitiveContains(searchText) }
+    private func initializeLocation() {
+        guard !hasInitializedLocation else { return }
+        
+        // Request location permission if needed
+        if locationManager.authorizationStatus == .notDetermined {
+            locationManager.requestLocationPermission()
+            return
         }
+        
+        // Wait for location if not available yet
+        guard let userLocation = locationManager.location else {
+            // Start updating location
+            locationManager.startUpdatingLocation()
+            return
+        }
+        
+        // Reverse geocode the location
+        Task {
+            await MainActor.run {
+                isReverseGeocoding = true
+            }
+            
+            do {
+                if let address = try await locationManager.reverseGeocodeLocation(userLocation) {
+                    await MainActor.run {
+                        searchText = address
+                        viewModel.selectedBuilding = address
+                        viewModel.location = userLocation
+                        hasInitializedLocation = true
+                        isReverseGeocoding = false
+                    }
+                } else {
+                    await MainActor.run {
+                        isReverseGeocoding = false
+                        hasInitializedLocation = true
+                    }
+                }
+            } catch {
+                await MainActor.run {
+                    isReverseGeocoding = false
+                    hasInitializedLocation = true
+                    print("Reverse geocoding error: \(error.localizedDescription)")
+                }
+            }
+        }
+    }
+    
+    private func performSearch(query: String) {
+        // Cancel previous search
+        searchTask?.cancel()
+        
+        guard !query.isEmpty else {
+            searchService.cancelSearch()
+            showResults = false
+            return
+        }
+        
+        // Get user location - if unavailable, don't search
+        guard let searchLocation = locationManager.location else {
+            searchService.cancelSearch()
+            showResults = false
+            return
+        }
+        
+        showResults = true
+        
+        // Debounce search
+        searchTask = Task {
+            try? await Task.sleep(nanoseconds: 300_000_000) // 300ms
+            
+            if !Task.isCancelled {
+                await searchService.search(query: query, near: searchLocation)
+            }
+        }
+    }
+    
+    private func selectLocation(mapItem: MKMapItem) {
+        guard let name = mapItem.name else { return }
+        
+        viewModel.selectedBuilding = name
+        viewModel.location = mapItem.placemark.coordinate
+        searchText = name
+        showResults = false
+        
+        FTHaptics.light()
     }
 }
 

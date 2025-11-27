@@ -6,10 +6,14 @@
 //
 
 import SwiftUI
+import Foundation
 
 struct InboxView: View {
     @EnvironmentObject var appState: AppState
+    @StateObject private var repository = NotificationRepository()
     @State private var selectedFilter: NotificationFilter = .all
+    @State private var isLoading = false
+    @State private var errorMessage: String?
     
     enum NotificationFilter: String, CaseIterable {
         case all = "All"
@@ -57,7 +61,34 @@ struct InboxView: View {
                 
                 Divider()
                 
-                if filteredNotifications.isEmpty {
+                if isLoading {
+                    ProgressView()
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if let errorMessage = errorMessage {
+                    VStack(spacing: 16) {
+                        Image(systemName: "exclamationmark.triangle")
+                            .font(.system(size: 48))
+                            .foregroundColor(.stateWarn)
+                        
+                        Text("Error Loading Notifications")
+                            .font(.system(size: 20, weight: .semibold))
+                            .foregroundColor(.inkPrimary)
+                        
+                        Text(errorMessage)
+                            .font(.system(size: 15))
+                            .foregroundColor(.inkSecondary)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 40)
+                        
+                        Button("Try Again") {
+                            Task {
+                                await loadNotifications()
+                            }
+                        }
+                        .buttonStyle(.borderedProminent)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if filteredNotifications.isEmpty {
                     EmptyInboxView(filter: selectedFilter)
                 } else {
                     ScrollView {
@@ -76,6 +107,9 @@ struct InboxView: View {
                         .padding(.bottom, 100)
                     }
                     .background(Color.bgElev1)
+                    .refreshable {
+                        await loadNotifications()
+                    }
                 }
             }
             .navigationTitle("Inbox")
@@ -96,9 +130,13 @@ struct InboxView: View {
             }
         }
         .onAppear {
-            // Seed notifications if empty
-            if appState.notifications.isEmpty {
-                appState.notifications = MockData.generateNotifications()
+            Task {
+                await loadNotifications()
+            }
+        }
+        .onChange(of: selectedFilter) { _ in
+            Task {
+                await loadNotifications()
             }
         }
     }
@@ -116,15 +154,74 @@ struct InboxView: View {
         }
     }
     
+    private func loadNotifications() async {
+        // Check if user is authenticated
+        guard AuthManager.shared.isAuthenticated else {
+            await MainActor.run {
+                errorMessage = "Please sign in to view notifications"
+                isLoading = false
+            }
+            return
+        }
+        
+        await MainActor.run {
+            isLoading = true
+            errorMessage = nil
+        }
+        
+        do {
+            // Convert view filter to repository filter
+            // Note: There are two NotificationFilter enums - one in InboxView and one at module level
+            // We need to use the module-level one for the repository
+            let repoFilter: FoodTree.NotificationFilter? = {
+                switch selectedFilter {
+                case .all: return nil
+                case .unread: return FoodTree.NotificationFilter.unread
+                case .posts: return FoodTree.NotificationFilter.posts
+                case .updates: return FoodTree.NotificationFilter.updates
+                }
+            }()
+            
+            let notifications = try await repository.fetchNotifications(filter: repoFilter)
+            
+            await MainActor.run {
+                appState.notifications = notifications
+                isLoading = false
+            }
+        } catch {
+            await MainActor.run {
+                errorMessage = "Failed to load notifications: \(error.localizedDescription)"
+                isLoading = false
+                // Don't clear existing notifications on error
+            }
+        }
+    }
+    
     private func markAsRead(_ notification: AppNotification) {
-        if let index = appState.notifications.firstIndex(where: { $0.id == notification.id }) {
-            appState.notifications[index].read = true
+        Task {
+            do {
+                try await repository.markAsRead(notificationId: notification.id)
+                // Update local state
+                if let index = appState.notifications.firstIndex(where: { $0.id == notification.id }) {
+                    appState.notifications[index].read = true
+                }
+            } catch {
+                print("Failed to mark notification as read: \(error.localizedDescription)")
+            }
         }
     }
     
     private func markAllAsRead() {
-        for index in appState.notifications.indices {
-            appState.notifications[index].read = true
+        Task {
+            do {
+                try await repository.markAllAsRead()
+                // Update local state
+                for index in appState.notifications.indices {
+                    appState.notifications[index].read = true
+                }
+            } catch {
+                print("Failed to mark all as read: \(error.localizedDescription)")
+            }
         }
     }
 }

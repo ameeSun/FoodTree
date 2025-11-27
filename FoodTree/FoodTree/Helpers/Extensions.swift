@@ -7,6 +7,7 @@
 
 import SwiftUI
 import CoreLocation
+import MapKit
 
 // MARK: - Date Extensions
 extension Date {
@@ -128,6 +129,13 @@ extension Int {
 extension Double {
     var cleanValue: String {
         return self.truncatingRemainder(dividingBy: 1) == 0 ? String(format: "%.0f", self) : String(self)
+    }
+}
+
+// MARK: - MKMapItem Extensions
+extension MKMapItem: Identifiable {
+    public var id: String {
+        return "\(name ?? "")-\(placemark.coordinate.latitude)-\(placemark.coordinate.longitude)"
     }
 }
 

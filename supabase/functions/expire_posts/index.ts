@@ -201,7 +201,7 @@ serve(async (req) => {
  *    
  *    select cron.schedule(
  *      'expire-posts-every-5-minutes',
- *      '*/5 * * * *',  -- Every 5 minutes
+ *      '0,5,10,15,20,25,30,35,40,45,50,55 * * * *',  // Every 5 minutes
  *      $$
  *      select net.http_post(
  *        url := 'https://duluhjkiqoahshxhiyqz.supabase.co/functions/v1/expire_posts',

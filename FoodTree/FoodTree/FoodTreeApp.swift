@@ -70,7 +70,7 @@ class AppState: ObservableObject {
 }
 
 enum UserRole: String, CaseIterable, Codable {
-    case student = "Student"
-    case organizer = "Organizer"
+    case student = "student"
+    case organizer = "organizer"
 }
 

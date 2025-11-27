@@ -11,6 +11,7 @@ import Combine
 
 struct MapView: View {
     @StateObject private var viewModel = MapViewModel()
+    @StateObject private var locationManager = LocationManager()
     @State private var sheetDetent: BottomSheet<AnyView>.Detent = .peek
     @State private var selectedPost: FoodPost?
     @State private var showFilters = false
@@ -160,28 +161,97 @@ struct MapView: View {
         }
         .sheet(isPresented: $showFilters) {
             FilterView(filters: $viewModel.filters)
+                .onDisappear {
+                    // Reload posts when filters change
+                    Task {
+                        await viewModel.loadPosts(locationManager: locationManager)
+                    }
+                }
+        }
+        .onAppear {
+            Task {
+                await viewModel.loadPosts(locationManager: locationManager)
+                // Update map region when location is available
+                if let location = locationManager.location {
+                    region.center = location
+                }
+            }
+        }
+        .onChange(of: locationManager.location) { newLocation in
+            if let location = newLocation {
+                // Update map region to user location
+                region.center = location
+                // Reload posts with new location
+                Task {
+                    await viewModel.loadPosts(locationManager: locationManager)
+                }
+            }
         }
     }
 }
 
 // MARK: - Map ViewModel
 class MapViewModel: ObservableObject {
-    @Published var posts: [FoodPost]
+    @Published var posts: [FoodPost] = []
     @Published var userLocation: CLLocationCoordinate2D?
     @Published var filters = MapFilters()
+    @Published var isLoading = false
+    @Published var errorMessage: String?
     
-    init() {
-        self.posts = MockData.generatePosts()
-        self.userLocation = MockData.stanfordCenter
-        
-        // Simulate location updates
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
-            self.userLocation = MockData.stanfordCenter
-        }
-    }
+    private let repository = FoodPostRepository()
     
     var hasActiveFilters: Bool {
         !filters.dietary.isEmpty || filters.distance < 3.0 || filters.onlyVerified
+    }
+    
+    func loadPosts(locationManager: LocationManager) async {
+        isLoading = true
+        errorMessage = nil
+        
+        // Wait for location with timeout
+        var location = locationManager.location
+        if location == nil {
+            // Wait up to 3 seconds for location
+            for _ in 0..<30 {
+                try? await Task.sleep(nanoseconds: 100_000_000) // 0.1 seconds
+                location = locationManager.location
+                if location != nil {
+                    break
+                }
+            }
+        }
+        
+        // Use fallback location if still nil
+        let center = location ?? MockData.stanfordCenter
+        userLocation = center
+        
+        // Convert distance from miles to meters
+        let radiusMeters = filters.distance * 1609.34
+        
+        // Convert filters
+        let postFilters = filters.toPostFilters()
+        
+        do {
+            let fetchedPosts = try await repository.fetchNearbyPosts(
+                center: center,
+                radiusMeters: radiusMeters,
+                filters: postFilters
+            )
+            
+            await MainActor.run {
+                self.posts = fetchedPosts
+                self.isLoading = false
+            }
+        } catch {
+            await MainActor.run {
+                self.errorMessage = "Failed to load posts: \(error.localizedDescription)"
+                self.isLoading = false
+            }
+        }
+    }
+    
+    func refreshPosts(locationManager: LocationManager) async {
+        await loadPosts(locationManager: locationManager)
     }
 }
 
@@ -193,6 +263,17 @@ struct MapFilters {
     var perishableOnly: Bool = false
     var onlyVerified: Bool = false
     var buildings: Set<String> = []
+}
+
+// MARK: - MapFilters Extension for Repository Conversion
+extension MapFilters {
+    func toPostFilters() -> PostFilters {
+        PostFilters(
+            dietary: Array(self.dietary.map { $0.rawValue }),
+            statuses: [],
+            verifiedOnly: self.onlyVerified
+        )
+    }
 }
 
 // MARK: - Filter View

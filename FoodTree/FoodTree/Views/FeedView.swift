@@ -11,6 +11,7 @@ import CoreLocation
 
 struct FeedView: View {
     @StateObject private var viewModel = FeedViewModel()
+    @StateObject private var locationManager = LocationManager()
     @State private var selectedPost: FoodPost?
     @State private var showDetail = false
     @State private var showFilters = false
@@ -27,6 +28,32 @@ struct FeedView: View {
                             ForEach(0..<3) { _ in
                                 FoodCardSkeleton()
                             }
+                        } else if let errorMessage = viewModel.errorMessage {
+                            // Error state
+                            VStack(spacing: 16) {
+                                Image(systemName: "exclamationmark.triangle")
+                                    .font(.system(size: 48))
+                                    .foregroundColor(.stateWarn)
+                                
+                                Text("Error Loading Posts")
+                                    .font(.system(size: 20, weight: .semibold))
+                                    .foregroundColor(.inkPrimary)
+                                
+                                Text(errorMessage)
+                                    .font(.system(size: 15))
+                                    .foregroundColor(.inkSecondary)
+                                    .multilineTextAlignment(.center)
+                                    .padding(.horizontal, 40)
+                                
+                                Button("Try Again") {
+                                    Task {
+                                        await viewModel.loadPosts(locationManager: locationManager)
+                                    }
+                                }
+                                .buttonStyle(.borderedProminent)
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding(.top, 100)
                         } else if viewModel.posts.isEmpty {
                             // Empty state
                             EmptyFeedView()
@@ -65,11 +92,23 @@ struct FeedView: View {
                     .padding(.bottom, 100)
                 }
                 .refreshable {
-                    await viewModel.refresh()
+                    await viewModel.loadPosts(locationManager: locationManager)
                 }
             }
             .navigationTitle("Feed")
             .navigationBarTitleDisplayMode(.large)
+            .onAppear {
+                Task {
+                    await viewModel.loadPosts(locationManager: locationManager)
+                }
+            }
+            .onChange(of: locationManager.location) { newLocation in
+                if newLocation != nil {
+                    Task {
+                        await viewModel.loadPosts(locationManager: locationManager)
+                    }
+                }
+            }
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button(action: {
@@ -84,6 +123,12 @@ struct FeedView: View {
             }
             .sheet(isPresented: $showFilters) {
                 FilterView(filters: $viewModel.filters)
+                    .onDisappear {
+                        // Reload posts when filters change
+                        Task {
+                            await viewModel.loadPosts(locationManager: locationManager)
+                        }
+                    }
             }
             .sheet(isPresented: $showDetail) {
                 if let post = selectedPost {
@@ -96,32 +141,87 @@ struct FeedView: View {
 
 // MARK: - Feed ViewModel
 class FeedViewModel: ObservableObject {
-    @Published var posts: [FoodPost]
+    @Published var posts: [FoodPost] = []
     @Published var userLocation: CLLocationCoordinate2D?
     @Published var filters = MapFilters()
     @Published var isLoading = false
+    @Published var errorMessage: String?
     @Published var savedPosts: Set<String> = []
     @Published var hiddenPosts: Set<String> = []
     
-    init() {
-        self.posts = MockData.generatePosts()
-        self.userLocation = MockData.stanfordCenter
-    }
+    private let repository = FoodPostRepository()
     
     var hasActiveFilters: Bool {
         !filters.dietary.isEmpty || filters.distance < 3.0 || filters.onlyVerified
     }
     
-    func refresh() async {
+    func loadPosts(locationManager: LocationManager) async {
         isLoading = true
-        // Simulate network delay
-        try? await Task.sleep(nanoseconds: 1_000_000_000)
-        posts = MockData.generatePosts()
-        isLoading = false
+        errorMessage = nil
+        
+        // Wait for location with timeout
+        var location = locationManager.location
+        if location == nil {
+            // Wait up to 3 seconds for location
+            for _ in 0..<30 {
+                try? await Task.sleep(nanoseconds: 100_000_000) // 0.1 seconds
+                location = locationManager.location
+                if location != nil {
+                    break
+                }
+            }
+        }
+        
+        // Use fallback location if still nil
+        let center = location ?? MockData.stanfordCenter
+        userLocation = center
+        
+        // Convert distance from miles to meters
+        let radiusMeters = filters.distance * 1609.34
+        
+        // Convert filters
+        let postFilters = filters.toPostFilters()
+        
+        do {
+            let fetchedPosts = try await repository.fetchNearbyPosts(
+                center: center,
+                radiusMeters: radiusMeters,
+                filters: postFilters
+            )
+            
+            await MainActor.run {
+                // Filter out hidden posts
+                self.posts = fetchedPosts.filter { !hiddenPosts.contains($0.id) }
+                self.isLoading = false
+            }
+        } catch {
+            await MainActor.run {
+                self.errorMessage = "Failed to load posts: \(error.localizedDescription)"
+                self.isLoading = false
+                // Keep existing posts if any, or show empty state
+            }
+        }
+    }
+    
+    func refresh() async {
+        // This will be called from the view with the locationManager instance
     }
     
     func savePost(_ post: FoodPost) {
-        savedPosts.insert(post.id)
+        Task {
+            do {
+                let isSaved = try await repository.toggleSavedPost(postId: post.id)
+                await MainActor.run {
+                    if isSaved {
+                        savedPosts.insert(post.id)
+                    } else {
+                        savedPosts.remove(post.id)
+                    }
+                }
+            } catch {
+                print("Failed to save post: \(error.localizedDescription)")
+            }
+        }
     }
     
     func hidePost(_ post: FoodPost) {

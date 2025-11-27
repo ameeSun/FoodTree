@@ -114,7 +114,34 @@ struct OrganizerDashboardView: View {
                 Divider()
                 
                 // Posts list
-                if filteredPosts.isEmpty {
+                if viewModel.isLoading {
+                    ProgressView()
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if let errorMessage = viewModel.errorMessage {
+                    VStack(spacing: 16) {
+                        Image(systemName: "exclamationmark.triangle")
+                            .font(.system(size: 48))
+                            .foregroundColor(.stateWarn)
+                        
+                        Text("Error Loading Posts")
+                            .font(.system(size: 20, weight: .semibold))
+                            .foregroundColor(.inkPrimary)
+                        
+                        Text(errorMessage)
+                            .font(.system(size: 15))
+                            .foregroundColor(.inkSecondary)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 40)
+                        
+                        Button("Try Again") {
+                            Task {
+                                await viewModel.loadMyPosts()
+                            }
+                        }
+                        .buttonStyle(.borderedProminent)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if filteredPosts.isEmpty {
                     EmptyDashboardView(tab: selectedTab)
                 } else {
                     ScrollView {
@@ -146,6 +173,11 @@ struct OrganizerDashboardView: View {
                     }
                     .foregroundColor(.brandPrimary)
                     .fontWeight(.semibold)
+                }
+            }
+            .onAppear {
+                Task {
+                    await viewModel.loadMyPosts()
                 }
             }
         }
@@ -490,12 +522,11 @@ struct EmptyDashboardView: View {
 
 // MARK: - Organizer ViewModel
 class OrganizerViewModel: ObservableObject {
-    @Published var posts: [FoodPost]
+    @Published var posts: [FoodPost] = []
+    @Published var isLoading = false
+    @Published var errorMessage: String?
     
-    init() {
-        // Filter to show only some posts as "organizer's posts"
-        self.posts = Array(MockData.generatePosts().prefix(4))
-    }
+    private let repository = FoodPostRepository()
     
     var totalViews: Int {
         posts.reduce(0) { $0 + $1.metrics.views }
@@ -505,31 +536,91 @@ class OrganizerViewModel: ObservableObject {
         posts.reduce(0) { $0 + $1.metrics.onMyWay }
     }
     
+    func loadMyPosts() async {
+        // Check if user is authenticated
+        guard AuthManager.shared.isAuthenticated else {
+            await MainActor.run {
+                errorMessage = "Please sign in to view your posts"
+                isLoading = false
+            }
+            return
+        }
+        
+        await MainActor.run {
+            isLoading = true
+            errorMessage = nil
+        }
+        
+        do {
+            let fetchedPosts = try await repository.fetchMyPosts()
+            
+            await MainActor.run {
+                posts = fetchedPosts
+                isLoading = false
+            }
+        } catch {
+            await MainActor.run {
+                errorMessage = "Failed to load posts: \(error.localizedDescription)"
+                isLoading = false
+            }
+        }
+    }
+    
     func markAsLow(_ post: FoodPost) {
-        if let index = posts.firstIndex(where: { $0.id == post.id }) {
-            posts[index].status = .low
+        Task {
+            do {
+                try await repository.markAsLow(postId: post.id)
+                await refreshPosts()
+            } catch {
+                await MainActor.run {
+                    errorMessage = "Failed to update post: \(error.localizedDescription)"
+                }
+            }
         }
     }
     
     func markAsGone(_ post: FoodPost) {
-        if let index = posts.firstIndex(where: { $0.id == post.id }) {
-            posts[index].status = .gone
+        Task {
+            do {
+                try await repository.markAsGone(postId: post.id)
+                await refreshPosts()
+            } catch {
+                await MainActor.run {
+                    errorMessage = "Failed to update post: \(error.localizedDescription)"
+                }
+            }
         }
     }
     
     func extendTime(_ post: FoodPost) {
-        if let index = posts.firstIndex(where: { $0.id == post.id }) {
-            if let currentExpiry = posts[index].expiresAt {
-                posts[index].expiresAt = currentExpiry.addingTimeInterval(15 * 60)
+        Task {
+            do {
+                // Extend by 15 minutes
+                try await repository.extendPost(postId: post.id, additionalMinutes: 15)
+                await refreshPosts()
+            } catch {
+                await MainActor.run {
+                    errorMessage = "Failed to extend post: \(error.localizedDescription)"
+                }
             }
         }
     }
     
     func adjustQuantity(_ post: FoodPost, to quantity: Int) {
-        if let index = posts.firstIndex(where: { $0.id == post.id }) {
-            posts[index].quantityApprox = quantity
-            posts[index].updateStatus()
+        Task {
+            do {
+                try await repository.adjustQuantity(postId: post.id, newQuantity: quantity)
+                await refreshPosts()
+            } catch {
+                await MainActor.run {
+                    errorMessage = "Failed to update quantity: \(error.localizedDescription)"
+                }
+            }
         }
+    }
+    
+    private func refreshPosts() async {
+        await loadMyPosts()
     }
 }
 
