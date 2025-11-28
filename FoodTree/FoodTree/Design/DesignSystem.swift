@@ -54,28 +54,29 @@ extension Color {
 struct FTTypography {
     static func display(_ text: String) -> some View {
         Text(text)
-            .font(.system(size: 28, weight: .semibold))
+            .font(.system(size: 28, weight: .semibold, design: .rounded))
             .lineSpacing(6)
     }
-    
+
     static func title(_ text: String) -> some View {
         Text(text)
-            .font(.system(size: 20, weight: .semibold))
+            .font(.system(size: 20, weight: .semibold, design: .rounded))
             .lineSpacing(6)
     }
-    
+
     static func body(_ text: String) -> some View {
         Text(text)
-            .font(.system(size: 16, weight: .regular))
+            .font(.system(size: 16, weight: .regular, design: .rounded))
             .lineSpacing(6)
     }
-    
+
     static func caption(_ text: String) -> some View {
         Text(text)
-            .font(.system(size: 13, weight: .regular))
+            .font(.system(size: 13, weight: .regular, design: .rounded))
             .lineSpacing(5)
     }
 }
+
 
 // MARK: - Spacing & Layout
 struct FTLayout {
