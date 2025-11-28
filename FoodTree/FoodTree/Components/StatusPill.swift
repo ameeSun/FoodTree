@@ -35,7 +35,7 @@ struct StatusPill: View {
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
-        .background(statusColor.opacity(0.12))
+        .background(Color.white)
         .clipShape(Capsule())
         .accessibilityLabel("Status: \(status.displayName)")
     }
