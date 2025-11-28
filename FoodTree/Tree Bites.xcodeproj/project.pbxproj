@@ -91,7 +91,7 @@
 					};
 				};
 			};
-			buildConfigurationList = 891DE5172EC44B960043DFB3 /* Build configuration list for PBXProject "FoodTree" */;
+			buildConfigurationList = 891DE5172EC44B960043DFB3 /* Build configuration list for PBXProject "Tree Bites" */;
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
@@ -262,9 +262,10 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = H3D5V5HH5J;
+				DEVELOPMENT_TEAM = YNK8Q89Z66;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.food-and-drink";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Take photos of food you're posting to share with students.";
 				INFOPLIST_KEY_NSLocationAlwaysAndWhenInUseUsageDescription = "We use your location to notify you when free food becomes available nearby.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "We need your location to show you nearby food posts and provide walking directions.";
@@ -282,10 +283,12 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.stanford.FoodTree;
+				PRODUCT_BUNDLE_IDENTIFIER = com.stanford.TreeBites;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
-				SUPPORTED_PLATFORMS = "iphonesimulator iphoneos";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -302,9 +305,10 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = H3D5V5HH5J;
+				DEVELOPMENT_TEAM = YNK8Q89Z66;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.food-and-drink";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Take photos of food you're posting to share with students.";
 				INFOPLIST_KEY_NSLocationAlwaysAndWhenInUseUsageDescription = "We use your location to notify you when free food becomes available nearby.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "We need your location to show you nearby food posts and provide walking directions.";
@@ -322,10 +326,12 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.stanford.FoodTree;
+				PRODUCT_BUNDLE_IDENTIFIER = com.stanford.TreeBites;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
-				SUPPORTED_PLATFORMS = "iphonesimulator iphoneos";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -338,7 +344,7 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		891DE5172EC44B960043DFB3 /* Build configuration list for PBXProject "FoodTree" */ = {
+		891DE5172EC44B960043DFB3 /* Build configuration list for PBXProject "Tree Bites" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				891DE5252EC44B970043DFB3 /* Debug */,
