@@ -15,11 +15,13 @@ struct LoginView: View {
             VStack(spacing: 24) {
                 // Logo / Header
                 VStack(spacing: 16) {
-                    Image(systemName: "leaf.fill")
-                        .font(.system(size: 60))
-                        .foregroundColor(.brandPrimary)
+                    Image("TreeBitesLogo")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 120, height: 120)
+                        .shadow(color: .black.opacity(0.08), radius: 10, x: 0, y: 6)
                     
-                    Text("TreeBites")
+                    Text("Tree Bites")
                         .font(.system(size: 32, weight: .bold))
                         .foregroundColor(.brandPrimaryInk)
                     
