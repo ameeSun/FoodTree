@@ -61,36 +61,6 @@ class AuthService: ObservableObject {
                 .execute()
                 .value
             
-            if existingProfile == nil {
-                // Create profile only if it doesn't exist
-                let newProfile = UserProfile(
-                    id: user.id,
-                    email: email,
-                    fullName: email.components(separatedBy: "@").first,
-                    role: role,
-                    isVerifiedOrganizer: false,
-                    avatarUrl: nil,
-                    dietaryPreferences: [],
-                    searchRadiusMiles: 1.0,
-                    notificationPreferences: ["new_posts": true, "running_low": true, "post_updates": true],
-                    createdAt: Date(),
-                    updatedAt: Date()
-                )
-                
-                do {
-                    try await client.database
-                        .from("profiles")
-                        .insert(newProfile)
-                        .execute()
-                } catch {
-                    // If profile insert fails, try to fetch existing one
-                    print("⚠️ Profile insert failed, trying to fetch existing profile: \(error)")
-                }
-            }
-            
-            // Fetch profile and authenticate
-            await fetchProfile(userId: user.id)
-            
             // Check if email confirmation is required
             if response.session == nil {
                 // Email confirmation required
@@ -99,8 +69,43 @@ class AuthService: ObservableObject {
                 return false
             }
             
+            // Set authenticated state immediately so UI can update
             isAuthenticated = true
             isLoading = false
+            
+            // Create profile and fetch in background (non-blocking)
+            Task { @MainActor in
+                if existingProfile == nil {
+                    // Create profile only if it doesn't exist
+                    let newProfile = UserProfile(
+                        id: user.id,
+                        email: email,
+                        fullName: email.components(separatedBy: "@").first,
+                        role: role,
+                        isVerifiedOrganizer: false,
+                        avatarUrl: nil,
+                        dietaryPreferences: [],
+                        searchRadiusMiles: 1.0,
+                        notificationPreferences: ["new_posts": true, "running_low": true, "post_updates": true],
+                        createdAt: Date(),
+                        updatedAt: Date()
+                    )
+                    
+                    do {
+                        try await client.database
+                            .from("profiles")
+                            .insert(newProfile)
+                            .execute()
+                    } catch {
+                        // If profile insert fails, try to fetch existing one
+                        print("⚠️ Profile insert failed, trying to fetch existing profile: \(error)")
+                    }
+                }
+                
+                // Fetch profile
+                await fetchProfile(userId: user.id)
+            }
+            
             return true
         } catch {
             isLoading = false
@@ -136,15 +141,22 @@ class AuthService: ObservableObject {
             
             let user = session.user
             
-            // Ensure profile exists (create if missing)
-            await ensureProfile(userId: user.id, email: email)
-            
-            await fetchProfile(userId: user.id)
+            // Set authenticated state immediately so UI can update
             isAuthenticated = true
             isLoading = false
+            
+            // Fetch profile in background (non-blocking)
+            Task { @MainActor in
+                // Ensure profile exists (create if missing)
+                await ensureProfile(userId: user.id, email: email)
+                // Fetch profile
+                await fetchProfile(userId: user.id)
+            }
+            
             return true
         } catch {
             isLoading = false
+            isAuthenticated = false
             let errorDescription = error.localizedDescription.lowercased()
             
             // Handle specific error cases

@@ -11,6 +11,25 @@ struct ProfileView: View {
     @EnvironmentObject var appState: AppState
     @State private var showSettings = false
     @State private var showOrganizerDashboard = false
+    @State private var showCommunityGuidelines = false
+    
+    private var currentUser: UserProfile? {
+        AuthService.shared.currentUser
+    }
+    
+    private var userRole: UserRole {
+        appState.userRole
+    }
+    
+    private var userDisplayName: String {
+        if let fullName = currentUser?.fullName, !fullName.isEmpty {
+            return fullName
+        } else if let email = currentUser?.email {
+            return email.components(separatedBy: "@").first ?? "User"
+        } else {
+            return "User"
+        }
+    }
     
     var body: some View {
         NavigationView {
@@ -28,57 +47,23 @@ struct ProfileView: View {
                             )
                         
                         VStack(spacing: 4) {
-                            Text("Stanford Student")
+                            Text(userDisplayName)
                                 .font(.system(size: 24, weight: .semibold))
                                 .foregroundColor(.inkPrimary)
                             
-                            Text("student@stanford.edu")
+                            Text(currentUser?.email ?? "email@stanford.edu")
                                 .font(.system(size: 16))
                                 .foregroundColor(.inkSecondary)
+                            
+                            Text(userRole.displayName)
+                                .font(.system(size: 14, weight: .medium))
+                                .foregroundColor(.inkMuted)
+                                .padding(.top, 2)
                         }
                     }
                     .padding(.top, 20)
                     
-                    // Role toggle
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("I'm posting as")
-                            .font(.system(size: 15, weight: .semibold))
-                            .foregroundColor(.inkSecondary)
-                            .padding(.horizontal, FTLayout.paddingM)
-                        
-                        HStack(spacing: 12) {
-                            ForEach(UserRole.allCases, id: \.self) { role in
-                                Button(action: {
-                                    appState.userRole = role
-                                    FTHaptics.medium()
-                                }) {
-                                    VStack(spacing: 8) {
-                                        Image(systemName: role == .student ? "person.fill" : "building.2.fill")
-                                            .font(.system(size: 24))
-                                        
-                                        Text(role.rawValue)
-                                            .font(.system(size: 15, weight: .medium))
-                                    }
-                                    .foregroundColor(appState.userRole == role ? .white : .inkPrimary)
-                                    .frame(maxWidth: .infinity)
-                                    .padding(.vertical, 20)
-                                    .background(appState.userRole == role ? Color.brandPrimary : Color.bgElev2Card)
-                                    .clipShape(RoundedRectangle(cornerRadius: FTLayout.cornerRadiusCard))
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: FTLayout.cornerRadiusCard)
-                                            .strokeBorder(
-                                                appState.userRole == role ? Color.clear : Color.strokeSoft,
-                                                lineWidth: 1
-                                            )
-                                    )
-                                    .ftShadow(opacity: appState.userRole == role ? 0.15 : 0.08)
-                                }
-                            }
-                        }
-                        .padding(.horizontal, FTLayout.paddingM)
-                    }
-                    
-                    if appState.userRole == .organizer {
+                    if userRole == .organizer {
                         // Organizer dashboard link
                         Button(action: {
                             showOrganizerDashboard = true
@@ -107,26 +92,52 @@ struct ProfileView: View {
                         .padding(.horizontal, FTLayout.paddingM)
                     }
                     
+                    if userRole == .student {
+                        // Settings button for students only
+                        Button(action: {
+                            showSettings = true
+                            FTHaptics.light()
+                        }) {
+                            HStack {
+                                Image(systemName: "gearshape.fill")
+                                    .font(.system(size: 18))
+                                    .foregroundColor(.brandPrimary)
+                                
+                                Text("Settings")
+                                    .font(.system(size: 16, weight: .medium))
+                                    .foregroundColor(.inkPrimary)
+                                
+                                Spacer()
+                                
+                                Image(systemName: "chevron.right")
+                                    .font(.system(size: 14, weight: .semibold))
+                                    .foregroundColor(.inkMuted)
+                            }
+                            .padding(FTLayout.paddingM)
+                            .background(Color.bgElev2Card)
+                            .clipShape(RoundedRectangle(cornerRadius: FTLayout.cornerRadiusCard))
+                            .ftShadow()
+                        }
+                        .padding(.horizontal, FTLayout.paddingM)
+                    }
+                    
                     Divider()
                         .padding(.horizontal, FTLayout.paddingM)
                     
                     // Settings sections
                     VStack(alignment: .leading, spacing: 16) {
-                        SettingsSection(title: "Preferences") {
-                            SettingsRow(icon: "fork.knife", title: "Dietary filters", value: dietaryFiltersSummary)
-                            SettingsRow(icon: "location.circle", title: "Search radius", value: String(format: "%.1f mi", appState.radiusPreference))
-                            SettingsRow(icon: "bell.badge", title: "Notifications", value: "Enabled")
-                            SettingsRow(icon: "moon", title: "Quiet hours", value: "10 PM - 8 AM")
-                        }
-                        
                         SettingsSection(title: "About") {
-                            SettingsRow(icon: "questionmark.circle", title: "Help & Support", value: nil)
-                            SettingsRow(icon: "doc.text", title: "Community Guidelines", value: nil)
-                            SettingsRow(icon: "shield.checkered", title: "Privacy & Safety", value: nil)
+                            SettingsRow(
+                                icon: "doc.text",
+                                title: "Community Guidelines",
+                                value: nil,
+                                action: {
+                                    showCommunityGuidelines = true
+                                }
+                            )
                         }
                         
                         SettingsSection(title: "Account") {
-                            SettingsRow(icon: "checkmark.seal", title: "Verify as organizer", value: nil, highlighted: appState.userRole == .organizer)
                             SettingsRow(
                                 icon: "arrow.right.square",
                                 title: "Sign Out",
@@ -153,18 +164,6 @@ struct ProfileView: View {
             .background(Color.bgElev1)
             .navigationTitle("Profile")
             .navigationBarTitleDisplayMode(.large)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button(action: {
-                        showSettings = true
-                        FTHaptics.light()
-                    }) {
-                        Image(systemName: "gearshape.fill")
-                            .font(.system(size: 20))
-                            .foregroundColor(.inkSecondary)
-                    }
-                }
-            }
         }
         .sheet(isPresented: $showSettings) {
             SettingsView()
@@ -172,17 +171,11 @@ struct ProfileView: View {
         .sheet(isPresented: $showOrganizerDashboard) {
             OrganizerDashboardView()
         }
-    }
-    
-    private var dietaryFiltersSummary: String {
-        if appState.dietaryPreferences.isEmpty {
-            return "None"
-        } else if appState.dietaryPreferences.count == 1 {
-            return appState.dietaryPreferences.first?.displayName ?? "1 selected"
-        } else {
-            return "\(appState.dietaryPreferences.count) selected"
+        .sheet(isPresented: $showCommunityGuidelines) {
+            CommunityGuidelinesView()
         }
     }
+    
 }
 
 // MARK: - Settings Section

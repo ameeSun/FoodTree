@@ -183,8 +183,10 @@ class FoodPostRepository: ObservableObject {
         
         print("✅ FoodPostRepo: Created post '\(input.title)'")
         
-        // TODO: Trigger nearby user notifications via edge function
-        // await triggerNearbyNotifications(post: completePost)
+        // Note: Notifications are automatically sent via database trigger
+        // (see migration 0006_notify_on_new_post.sql)
+        // The trigger calls notify_users edge function for all students
+        // with "new_posts" notifications enabled
         
         return completePost
     }

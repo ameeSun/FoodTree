@@ -164,6 +164,8 @@ struct OnboardingPageView: View {
 // MARK: - Permissions View
 struct PermissionsView: View {
     @EnvironmentObject var appState: AppState
+    @StateObject private var locationManager = LocationManager()
+    @StateObject private var notificationManager = NotificationManager()
     @State private var currentStep = 0
     
     let permissions: [Permission] = [
@@ -250,14 +252,93 @@ struct PermissionsView: View {
     private func grantPermission() {
         FTHaptics.medium()
         
-        // Mock permission grant
         if currentStep == 0 {
-            appState.hasLocationPermission = true
+            // Request location permission
+            locationManager.requestLocationPermission()
+            // Check status after a brief delay to allow dialog to appear
+            Task { @MainActor in
+                // Wait for user to respond to permission dialog
+                try? await Task.sleep(nanoseconds: 500_000_000) // 0.5 seconds
+                
+                // Check authorization status
+                let authorized = locationManager.authorizationStatus == .authorizedWhenInUse || 
+                                locationManager.authorizationStatus == .authorizedAlways
+                appState.hasLocationPermission = authorized
+                
+                // Move to next step
+                nextStep()
+            }
         } else {
-            appState.hasNotificationPermission = true
+            // Request notification permission
+            notificationManager.requestAuthorization()
+            
+            // Check status and update preferences after user responds
+            Task { @MainActor in
+                // Wait for user to respond to permission dialog
+                try? await Task.sleep(nanoseconds: 500_000_000) // 0.5 seconds
+                
+                // Re-check authorization status
+                notificationManager.checkAuthorizationStatus()
+                
+                // Check if permission was granted
+                let granted = notificationManager.authorizationStatus == .authorized
+                appState.hasNotificationPermission = granted
+                
+                // If granted, update user's notification preferences in database
+                if granted {
+                    await updateNotificationPreferences(enabled: true)
+                }
+                
+                // Move to next step
+                nextStep()
+            }
+        }
+    }
+    
+    private func updateNotificationPreferences(enabled: Bool) async {
+        guard let userId = AuthService.shared.currentUser?.id else {
+            return
         }
         
-        nextStep()
+        do {
+            // Get current preferences
+            let currentProfile: UserProfile? = try? await SupabaseConfig.shared.client.database
+                .from("profiles")
+                .select()
+                .eq("id", value: userId.uuidString)
+                .single()
+                .execute()
+                .value
+            
+            // Update notification preferences
+            var preferences = currentProfile?.notificationPreferences ?? [
+                "new_posts": true,
+                "running_low": true,
+                "post_updates": true
+            ]
+            preferences["new_posts"] = enabled
+            
+            // Update in database - Supabase will handle JSONB conversion
+            struct UpdatePayload: Codable {
+                let notification_preferences: [String: Bool]
+                let updated_at: String
+            }
+            
+            let payload = UpdatePayload(
+                notification_preferences: preferences,
+                updated_at: Date().toISO8601String()
+            )
+            
+            try await SupabaseConfig.shared.client.database
+                .from("profiles")
+                .update(payload)
+                .eq("id", value: userId.uuidString)
+                .execute()
+            
+            print("✅ Updated notification preferences: new_posts = \(enabled)")
+        } catch {
+            print("⚠️ Failed to update notification preferences: \(error)")
+        }
     }
     
     private func skipPermission() {
