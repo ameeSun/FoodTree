@@ -22,6 +22,8 @@
     <string>1</string>
     <key>LSRequiresIPhoneOS</key>
     <true/>
+    <key>ITSAppUsesNonExemptEncryption</key>
+    <false/>
     <key>UIApplicationSceneManifest</key>
     <dict>
         <key>UIApplicationSupportsMultipleScenes</key>
@@ -29,13 +31,6 @@
     </dict>
     <key>UIApplicationSupportsIndirectInputEvents</key>
     <true/>
-    <key>UILaunchScreen</key>
-    <dict>
-        <key>UIColorName</key>
-        <string>brandPrimary</string>
-        <key>UIImageName</key>
-        <string>leaf.fill</string>
-    </dict>
     <key>UIRequiredDeviceCapabilities</key>
     <array>
         <string>armv7</string>
