@@ -19,7 +19,7 @@ struct LoginView: View {
                         .font(.system(size: 60))
                         .foregroundColor(.brandPrimary)
                     
-                    Text("FoodTree")
+                    Text("TreeBites")
                         .font(.system(size: 32, weight: .bold))
                         .foregroundColor(.brandPrimaryInk)
                     

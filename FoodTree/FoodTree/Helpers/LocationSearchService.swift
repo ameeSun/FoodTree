@@ -1,6 +1,6 @@
 //
 //  LocationSearchService.swift
-//  FoodTree
+//  TreeBites
 //
 //  MapKit-based location search service
 //

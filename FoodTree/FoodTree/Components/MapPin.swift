@@ -1,6 +1,6 @@
 //
 //  MapPin.swift
-//  FoodTree
+//  TreeBites
 //
 //  Custom map annotation view with pulse animation
 //

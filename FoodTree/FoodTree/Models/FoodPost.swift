@@ -1,6 +1,6 @@
 //
 //  FoodPost.swift
-//  FoodTree
+//  TreeBites
 //
 //  Core data models for food posts
 //

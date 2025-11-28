@@ -1,6 +1,6 @@
 //
 //  RemoteImage.swift
-//  FoodTree
+//  TreeBites
 //
 //  Reusable image component that handles both remote URLs and local asset names
 //

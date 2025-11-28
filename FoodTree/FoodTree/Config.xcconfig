@@ -1,4 +1,4 @@
-// Configuration file for FoodTree
+// Configuration file for TreeBites
 // This file contains build settings including Supabase credentials
 // Note: This file is currently not used by the Xcode project.
 // Configuration is read from Info.plist via INFOPLIST_KEY_* build settings.

@@ -1,6 +1,6 @@
 //
 //  StatusPill.swift
-//  FoodTree
+//  TreeBites
 //
 //  Status indicator pills (Available, Low, Gone, Expired)
 //

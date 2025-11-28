@@ -1,6 +1,6 @@
 //
 //  LocationManager.swift
-//  FoodTree
+//  TreeBites
 //
 //  Location services manager
 //

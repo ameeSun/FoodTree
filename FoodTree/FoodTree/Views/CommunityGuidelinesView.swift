@@ -1,6 +1,6 @@
 //
 //  CommunityGuidelinesView.swift
-//  FoodTree
+//  TreeBites
 //
 //  Community guidelines and responsible sharing information
 //
@@ -20,7 +20,7 @@ struct CommunityGuidelinesView: View {
                             .font(.system(size: 28, weight: .bold))
                             .foregroundColor(.inkPrimary)
                         
-                        Text("FoodTree is built on trust, safety, and community care. Please follow these guidelines to ensure a positive experience for everyone.")
+                        Text("TreeBites is built on trust, safety, and community care. Please follow these guidelines to ensure a positive experience for everyone.")
                             .font(.system(size: 16))
                             .foregroundColor(.inkSecondary)
                     }
@@ -69,7 +69,7 @@ struct CommunityGuidelinesView: View {
                             title: "Community Standards",
                             icon: "person.2.fill",
                             items: [
-                                "FoodTree is for the Stanford community",
+                                "TreeBites is for the Stanford community",
                                 "Only post food you have permission to share",
                                 "No selling or commercial transactions",
                                 "Respect privacy and personal information",
@@ -81,7 +81,7 @@ struct CommunityGuidelinesView: View {
                     
                     // Footer
                     VStack(spacing: 12) {
-                        Text("Thank you for helping make FoodTree a safe and welcoming community!")
+                        Text("Thank you for helping make TreeBites a safe and welcoming community!")
                             .font(.system(size: 15, weight: .medium))
                             .foregroundColor(.inkPrimary)
                             .multilineTextAlignment(.center)

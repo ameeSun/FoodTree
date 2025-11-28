@@ -1,6 +1,6 @@
 //
 //  FoodPostRepository.swift
-//  FoodTree
+//  TreeBites
 //
 //  Repository for food post CRUD operations and queries
 //
@@ -39,6 +39,9 @@ class FoodPostRepository: ObservableObject {
             query = query.in("status", values: ["available", "low"]) // Default
         }
         
+        // Note: Expired posts are filtered client-side below
+        // This ensures posts with 0 minutes remaining are not shown
+        
         // Filter by dietary tags
         if !filters.dietary.isEmpty {
             query = query.overlaps("dietary", value: filters.dietary)
@@ -61,12 +64,22 @@ class FoodPostRepository: ObservableObject {
             dto.toFoodPost()
         }
         
-        // Client-side filtering for distance and verified
+        // Client-side filtering for distance, verified, and expiration
         posts = posts.filter { post in
             let distance = post.location.distance(from: center)
             let withinRadius = distance <= (radiusMeters / 1609.34) // meters to miles
             let meetsVerifiedCriteria = !filters.verifiedOnly || post.organizer.verified
-            return withinRadius && meetsVerifiedCriteria
+            
+            // Filter out expired posts (timeRemaining <= 0 or expiresAt in the past)
+            let isNotExpired: Bool
+            if let expiresAt = post.expiresAt {
+                isNotExpired = expiresAt > Date()
+            } else {
+                // If no expiration time, consider it not expired
+                isNotExpired = true
+            }
+            
+            return withinRadius && meetsVerifiedCriteria && isNotExpired
         }
         
         // Sort by distance
@@ -418,6 +431,19 @@ class FoodPostRepository: ObservableObject {
             .value
         
         return dtos.compactMap { $0.toFoodPost() }
+    }
+    
+    // MARK: - Delete Post
+    
+    /// Delete a post (used for auto-removal on reports)
+    func deletePost(postId: String) async throws {
+        try await supabase.database
+            .from("food_posts")
+            .delete()
+            .eq("id", value: postId)
+            .execute()
+        
+        print("✅ FoodPostRepo: Deleted post \(postId)")
     }
     
     // MARK: - Helpers

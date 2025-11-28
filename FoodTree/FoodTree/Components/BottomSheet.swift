@@ -1,6 +1,6 @@
 //
 //  BottomSheet.swift
-//  FoodTree
+//  TreeBites
 //
 //  Physics-based bottom sheet with detents
 //

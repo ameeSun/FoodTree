@@ -1,8 +1,8 @@
 // =====================================================
-// FoodTree Edge Function: expire_posts
+// TreeBites Edge Function: expire_posts
 // =====================================================
 // Runs on a schedule (every 5 minutes via cron)
-// Automatically expires posts that have passed their expiry time
+// Automatically deletes posts that have reached 0 minutes remaining
 // and sends notifications to relevant users
 // =====================================================
 
@@ -32,9 +32,11 @@ serve(async (req) => {
       }
     })
 
-    console.log('🕐 Starting post expiration check...')
+    console.log('🕐 Starting post deletion check...')
 
-    // Find posts that should be expired
+    // Find posts that should be deleted (time has reached 0 or passed)
+    // Include posts that are expired or have reached their expiration time
+    const now = new Date().toISOString()
     const { data: expiredPosts, error: fetchError } = await supabase
       .from('food_posts')
       .select(`
@@ -47,20 +49,20 @@ serve(async (req) => {
       `)
       .eq('auto_expires', true)
       .not('expires_at', 'is', null)
-      .lt('expires_at', new Date().toISOString())
-      .in('status', ['available', 'low'])
+      .lte('expires_at', now)  // Changed from .lt to .lte to include posts exactly at expiration
+      .in('status', ['available', 'low', 'expired'])  // Also include already expired posts
 
     if (fetchError) {
       throw new Error(`Failed to fetch expired posts: ${fetchError.message}`)
     }
 
     if (!expiredPosts || expiredPosts.length === 0) {
-      console.log('✅ No posts to expire')
+      console.log('✅ No posts to delete')
       return new Response(
         JSON.stringify({ 
           success: true, 
-          expired_count: 0,
-          message: 'No posts to expire'
+          deleted_count: 0,
+          message: 'No posts to delete'
         }),
         { 
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -69,22 +71,11 @@ serve(async (req) => {
       )
     }
 
-    console.log(`📦 Found ${expiredPosts.length} posts to expire`)
+    console.log(`📦 Found ${expiredPosts.length} posts to delete`)
 
-    // Update posts to expired status
     const postIds = expiredPosts.map(p => p.id)
-    const { error: updateError } = await supabase
-      .from('food_posts')
-      .update({ status: 'expired' })
-      .in('id', postIds)
 
-    if (updateError) {
-      throw new Error(`Failed to update posts: ${updateError.message}`)
-    }
-
-    console.log(`✅ Updated ${postIds.length} posts to expired status`)
-
-    // Create notifications for each expired post
+    // Create notifications for each post BEFORE deleting (so we can reference post_id)
     const notifications = []
 
     for (const post of expiredPosts) {
@@ -92,8 +83,8 @@ serve(async (req) => {
       notifications.push({
         user_id: post.creator_id,
         type: 'post_expired',
-        title: 'Post Expired',
-        body: `${post.title} at ${post.building_name} has expired`,
+        title: 'Post Deleted',
+        body: `${post.title} at ${post.building_name} has been deleted`,
         post_id: post.id,
         data: {}
       })
@@ -112,7 +103,7 @@ serve(async (req) => {
               user_id: user.user_id,
               type: 'post_expired',
               title: 'Post No Longer Available',
-              body: `${post.title} has expired`,
+              body: `${post.title} has been deleted`,
               post_id: post.id,
               data: {}
             })
@@ -134,8 +125,8 @@ serve(async (req) => {
             notifications.push({
               user_id: user.user_id,
               type: 'post_expired',
-              title: 'Saved Post Expired',
-              body: `${post.title} is no longer available`,
+              title: 'Saved Post Deleted',
+              body: `${post.title} has been deleted`,
               post_id: post.id,
               data: {}
             })
@@ -144,7 +135,7 @@ serve(async (req) => {
       }
     }
 
-    // Insert all notifications
+    // Insert all notifications BEFORE deleting posts
     if (notifications.length > 0) {
       const { error: notifError } = await supabase
         .from('notifications')
@@ -157,18 +148,30 @@ serve(async (req) => {
       }
     }
 
+    // Delete posts (CASCADE will automatically delete related records)
+    const { error: deleteError } = await supabase
+      .from('food_posts')
+      .delete()
+      .in('id', postIds)
+
+    if (deleteError) {
+      throw new Error(`Failed to delete posts: ${deleteError.message}`)
+    }
+
+    console.log(`✅ Deleted ${postIds.length} posts`)
+
     // TODO: Send push notifications via APNs/FCM
     // For each user with notifications, fetch their push_tokens and send
     // This is stubbed for now - implement when push is ready
 
-    console.log('✅ Post expiration completed successfully')
+    console.log('✅ Post deletion completed successfully')
 
     return new Response(
       JSON.stringify({ 
         success: true,
-        expired_count: postIds.length,
+        deleted_count: postIds.length,
         notifications_sent: notifications.length,
-        expired_post_ids: postIds
+        deleted_post_ids: postIds
       }),
       { 
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },

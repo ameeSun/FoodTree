@@ -1,5 +1,5 @@
 // =====================================================
-// FoodTree Edge Function: analytics_daily
+// TreeBites Edge Function: analytics_daily
 // =====================================================
 // Runs daily to compute analytics summary
 // Aggregates post metrics, organizer stats, and trends

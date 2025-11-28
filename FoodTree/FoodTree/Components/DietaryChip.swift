@@ -1,6 +1,6 @@
 //
 //  DietaryChip.swift
-//  FoodTree
+//  TreeBites
 //
 //  Dietary tag chips with icons
 //

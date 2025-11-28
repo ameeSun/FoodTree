@@ -1,6 +1,6 @@
 //
 //  AuthManager.swift
-//  FoodTree
+//  TreeBites
 //
 //  Manages Supabase authentication and user session
 //

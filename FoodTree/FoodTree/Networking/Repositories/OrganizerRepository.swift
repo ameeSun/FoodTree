@@ -1,6 +1,6 @@
 //
 //  OrganizerRepository.swift
-//  FoodTree
+//  TreeBites
 //
 //  Repository for organizer-specific operations
 //

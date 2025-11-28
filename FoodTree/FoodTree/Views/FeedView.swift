@@ -1,6 +1,6 @@
 //
 //  FeedView.swift
-//  FoodTree
+//  TreeBites
 //
 //  Vertical feed with swipe actions and pull-to-refresh
 //
@@ -27,8 +27,8 @@ struct FeedView: View {
                             ForEach(0..<3) { _ in
                                 FoodCardSkeleton()
                             }
-                        } else if let errorMessage = viewModel.errorMessage {
-                            // Error state
+                        } else if viewModel.posts.isEmpty && viewModel.errorMessage != nil {
+                            // Error state - only show if no posts and there's an error
                             VStack(spacing: 16) {
                                 Image(systemName: "exclamationmark.triangle")
                                     .font(.system(size: 48))
@@ -38,11 +38,13 @@ struct FeedView: View {
                                     .font(.system(size: 20, weight: .semibold))
                                     .foregroundColor(.inkPrimary)
                                 
-                                Text(errorMessage)
-                                    .font(.system(size: 15))
-                                    .foregroundColor(.inkSecondary)
-                                    .multilineTextAlignment(.center)
-                                    .padding(.horizontal, 40)
+                                if let errorMessage = viewModel.errorMessage {
+                                    Text(errorMessage)
+                                        .font(.system(size: 15))
+                                        .foregroundColor(.inkSecondary)
+                                        .multilineTextAlignment(.center)
+                                        .padding(.horizontal, 40)
+                                }
                                 
                                 Button("Try Again") {
                                     Task {
@@ -90,7 +92,7 @@ struct FeedView: View {
                     .padding(.bottom, 100)
                 }
                 .refreshable {
-                    await viewModel.loadPosts(locationManager: locationManager)
+                    await viewModel.loadPosts(locationManager: locationManager, isRefresh: true)
                 }
             }
             .navigationTitle("Feed")
@@ -158,21 +160,48 @@ class FeedViewModel: ObservableObject {
         !filters.dietary.isEmpty || filters.distance < 3.0 || filters.onlyVerified
     }
     
-    func loadPosts(locationManager: LocationManager) async {
-        isLoading = true
-        errorMessage = nil
+    func loadPosts(locationManager: LocationManager, isRefresh: Bool = false) async {
+        // Clear error message at start of load (unless it's a refresh, then keep existing posts)
+        if !isRefresh {
+            await MainActor.run {
+                self.isLoading = true
+                self.errorMessage = nil
+            }
+        } else {
+            // For refresh, don't show loading state, just clear error
+            await MainActor.run {
+                self.errorMessage = nil
+            }
+        }
         
         // Wait for location with timeout
         var location = locationManager.location
         if location == nil {
             // Wait up to 3 seconds for location
             for _ in 0..<30 {
+                // Check for cancellation during wait
                 try? await Task.sleep(nanoseconds: 100_000_000) // 0.1 seconds
+                if Task.isCancelled {
+                    await MainActor.run {
+                        self.isLoading = false
+                        // Don't set error message on cancellation
+                    }
+                    return
+                }
                 location = locationManager.location
                 if location != nil {
                     break
                 }
             }
+        }
+        
+        // Check for cancellation again
+        if Task.isCancelled {
+            await MainActor.run {
+                self.isLoading = false
+                // Don't set error message on cancellation
+            }
+            return
         }
         
         // Use fallback location if still nil
@@ -196,12 +225,27 @@ class FeedViewModel: ObservableObject {
                 // Filter out hidden posts
                 self.posts = fetchedPosts.filter { !hiddenPosts.contains($0.id) }
                 self.isLoading = false
+                self.errorMessage = nil // Clear any previous errors on success
+            }
+        } catch is CancellationError {
+            // Ignore cancellation errors from refreshable - don't show error, keep existing posts
+            await MainActor.run {
+                self.isLoading = false
+                self.errorMessage = nil // Clear error on cancellation
+                // Keep existing posts - don't clear them
             }
         } catch {
             await MainActor.run {
-                self.errorMessage = "Failed to load posts: \(error.localizedDescription)"
+                // Only set error if we don't have existing posts
+                // If we have posts, keep showing them and don't show error
+                if self.posts.isEmpty {
+                    self.errorMessage = "Failed to load posts: \(error.localizedDescription)"
+                } else {
+                    // If we have posts, just log the error but don't show it
+                    print("⚠️ Failed to refresh posts: \(error.localizedDescription)")
+                    self.errorMessage = nil
+                }
                 self.isLoading = false
-                // Keep existing posts if any, or show empty state
             }
         }
     }

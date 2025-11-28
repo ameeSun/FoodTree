@@ -1,12 +1,13 @@
 //
 //  FoodDetailView.swift
-//  FoodTree
+//  TreeBites
 //
 //  Full-screen food detail with hero gallery and actions
 //
 
 import SwiftUI
 import MapKit
+import UIKit
 
 struct FoodDetailView: View {
     let post: FoodPost
@@ -16,6 +17,7 @@ struct FoodDetailView: View {
     @State private var showNavigationOptions = false
     @State private var isOnMyWay = false
     @State private var showSuccessConfetti = false
+    @StateObject private var repository = FoodPostRepository()
     
     var body: some View {
         NavigationView {
@@ -237,12 +239,6 @@ struct FoodDetailView: View {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Menu {
                         Button(action: {
-                            sharePost()
-                        }) {
-                            Label("Share", systemImage: "square.and.arrow.up")
-                        }
-                        
-                        Button(action: {
                             savePost()
                         }) {
                             Label("Save", systemImage: "bookmark")
@@ -325,18 +321,11 @@ struct FoodDetailView: View {
             }
             .confirmationDialog("Navigate to pickup", isPresented: $showNavigationOptions) {
                 Button("Open in Apple Maps") {
-                    // Open Apple Maps (stub)
-                    FTHaptics.light()
-                }
-                
-                Button("Open in Google Maps") {
-                    // Open Google Maps (stub)
-                    FTHaptics.light()
+                    openInAppleMaps()
                 }
                 
                 Button("Copy address") {
-                    // Copy to clipboard (stub)
-                    FTHaptics.light()
+                    copyAddress()
                 }
                 
                 Button("Cancel", role: .cancel) {}
@@ -364,23 +353,103 @@ struct FoodDetailView: View {
     }
     
     private func toggleOnMyWay() {
-        isOnMyWay.toggle()
-        if isOnMyWay {
-            FTHaptics.success()
-            showSuccessConfetti = true
-        } else {
-            FTHaptics.light()
+        Task {
+            do {
+                let newState = try await repository.toggleOnMyWay(postId: post.id)
+                await MainActor.run {
+                    isOnMyWay = newState
+                    if newState {
+                        FTHaptics.success()
+                        showSuccessConfetti = true
+                    } else {
+                        FTHaptics.light()
+                    }
+                }
+            } catch {
+                print("Failed to toggle on my way: \(error.localizedDescription)")
+                await MainActor.run {
+                    FTHaptics.warning()
+                }
+            }
         }
-    }
-    
-    private func sharePost() {
-        FTHaptics.light()
-        // Share sheet (stub)
     }
     
     private func savePost() {
         FTHaptics.medium()
         // Save post (stub)
+    }
+    
+    private func openInAppleMaps() {
+        let coordinate = post.location.coordinate
+        let placemark = MKPlacemark(coordinate: coordinate)
+        let mapItem = MKMapItem(placemark: placemark)
+        
+        // Set name if building is available
+        if let building = post.location.building {
+            mapItem.name = building
+        }
+        
+        // Open in Apple Maps with directions
+        mapItem.openInMaps(launchOptions: [
+            MKLaunchOptionsDirectionsModeKey: MKLaunchOptionsDirectionsModeDriving
+        ])
+        
+        FTHaptics.light()
+    }
+    
+    private func copyAddress() {
+        let coordinate = post.location.coordinate
+        let location = CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)
+        let geocoder = CLGeocoder()
+        
+        Task {
+            do {
+                let placemarks = try await geocoder.reverseGeocodeLocation(location)
+                if let placemark = placemarks.first {
+                    var addressComponents: [String] = []
+                    
+                    if let streetNumber = placemark.subThoroughfare {
+                        addressComponents.append(streetNumber)
+                    }
+                    if let street = placemark.thoroughfare {
+                        addressComponents.append(street)
+                    }
+                    if let city = placemark.locality {
+                        addressComponents.append(city)
+                    }
+                    if let state = placemark.administrativeArea {
+                        addressComponents.append(state)
+                    }
+                    if let zip = placemark.postalCode {
+                        addressComponents.append(zip)
+                    }
+                    
+                    let address = addressComponents.joined(separator: " ")
+                    
+                    // If we have a building name, prefer that
+                    let finalAddress = post.location.building ?? address
+                    
+                    await MainActor.run {
+                        UIPasteboard.general.string = finalAddress
+                        FTHaptics.success()
+                    }
+                } else {
+                    // Fallback: use building name or coordinates
+                    let fallback = post.location.building ?? "\(coordinate.latitude), \(coordinate.longitude)"
+                    await MainActor.run {
+                        UIPasteboard.general.string = fallback
+                        FTHaptics.success()
+                    }
+                }
+            } catch {
+                // Fallback: use building name or coordinates
+                let fallback = post.location.building ?? "\(coordinate.latitude), \(coordinate.longitude)"
+                await MainActor.run {
+                    UIPasteboard.general.string = fallback
+                    FTHaptics.success()
+                }
+            }
+        }
     }
 }
 
@@ -534,22 +603,16 @@ struct LiveStatusBar: View {
 struct ReportView: View {
     let postId: String
     @Binding var isPresented: Bool
-    @State private var selectedReason: ReportReason?
+    @State private var selectedReason: FoodTree.ReportReason?
     @State private var additionalInfo = ""
-    
-    enum ReportReason: String, CaseIterable {
-        case spam = "Spam or misleading"
-        case unsafe = "Food safety concern"
-        case wrongLocation = "Wrong location"
-        case inappropriate = "Inappropriate content"
-        case other = "Other"
-    }
+    @State private var isSubmitting = false
+    @StateObject private var reportRepository = ReportRepository()
     
     var body: some View {
         NavigationView {
             Form {
                 Section {
-                    ForEach(ReportReason.allCases, id: \.self) { reason in
+                    ForEach(FoodTree.ReportReason.allCases, id: \.self) { reason in
                         Button(action: {
                             selectedReason = reason
                             FTHaptics.light()
@@ -583,13 +646,14 @@ struct ReportView: View {
                     Button("Cancel") {
                         isPresented = false
                     }
+                    .disabled(isSubmitting)
                 }
                 
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Submit") {
                         submitReport()
                     }
-                    .disabled(selectedReason == nil)
+                    .disabled(selectedReason == nil || isSubmitting)
                     .fontWeight(.semibold)
                 }
             }
@@ -597,9 +661,35 @@ struct ReportView: View {
     }
     
     private func submitReport() {
+        guard let reason = selectedReason else { return }
+        
+        isSubmitting = true
         FTHaptics.warning()
-        // Submit report (stub)
-        isPresented = false
+        
+        Task {
+            do {
+                let postDeleted = try await reportRepository.submitReport(
+                    postId: postId,
+                    reason: reason,
+                    comment: additionalInfo.isEmpty ? nil : additionalInfo
+                )
+                
+                await MainActor.run {
+                    isSubmitting = false
+                    isPresented = false
+                    
+                    if postDeleted {
+                        // Post was deleted - could show a toast or notification
+                        print("Post was deleted due to report")
+                    }
+                }
+            } catch {
+                await MainActor.run {
+                    isSubmitting = false
+                    print("Failed to submit report: \(error.localizedDescription)")
+                }
+            }
+        }
     }
 }
 

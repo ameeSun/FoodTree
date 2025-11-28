@@ -1,66 +1,28 @@
 //
 //  InboxView.swift
-//  FoodTree
+//  TreeBites
 //
 //  Notifications and messages inbox
 //
 
 import SwiftUI
 import Foundation
+import Combine
 
 struct InboxView: View {
     @EnvironmentObject var appState: AppState
     @StateObject private var repository = NotificationRepository()
-    @State private var selectedFilter: NotificationFilter = .all
     @State private var isLoading = false
     @State private var errorMessage: String?
     
-    enum NotificationFilter: String, CaseIterable {
-        case all = "All"
-        case unread = "Unread"
-        case posts = "Posts"
-        case updates = "Updates"
-    }
-    
+    // Only show unread notifications
     var filteredNotifications: [AppNotification] {
-        let notifications = appState.notifications
-        
-        switch selectedFilter {
-        case .all:
-            return notifications
-        case .unread:
-            return notifications.filter { !$0.read }
-        case .posts:
-            return notifications.filter { $0.type == .newPost }
-        case .updates:
-            return notifications.filter { $0.type == .runningLow || $0.type == .extended || $0.type == .expired }
-        }
+        return appState.notifications.filter { !$0.read }
     }
     
     var body: some View {
         NavigationView {
             VStack(spacing: 0) {
-                // Filter pills
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 12) {
-                        ForEach(NotificationFilter.allCases, id: \.self) { filter in
-                            FilterPill(
-                                title: filter.rawValue,
-                                isSelected: selectedFilter == filter,
-                                count: countFor(filter)
-                            ) {
-                                selectedFilter = filter
-                                FTHaptics.light()
-                            }
-                        }
-                    }
-                    .padding(.horizontal, FTLayout.paddingM)
-                }
-                .padding(.vertical, 12)
-                .background(Color.bgElev2Card)
-                
-                Divider()
-                
                 if isLoading {
                     ProgressView()
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -89,15 +51,36 @@ struct InboxView: View {
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if filteredNotifications.isEmpty {
-                    EmptyInboxView(filter: selectedFilter)
+                    EmptyInboxView()
                 } else {
                     ScrollView {
                         LazyVStack(spacing: 0) {
                             ForEach(filteredNotifications) { notification in
                                 NotificationRow(notification: notification)
+                                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                        if !notification.read {
+                                            Button(action: {
+                                                markAsRead(notification)
+                                            }) {
+                                                Label("Mark as read", systemImage: "checkmark.circle.fill")
+                                            }
+                                            .tint(.brandPrimary)
+                                        }
+                                    }
+                                    .highPriorityGesture(
+                                        LongPressGesture(minimumDuration: 0.5)
+                                            .onEnded { _ in
+                                                if !notification.read {
+                                                    markAsRead(notification)
+                                                    FTHaptics.medium()
+                                                }
+                                            }
+                                    )
                                     .onTapGesture {
-                                        markAsRead(notification)
-                                        FTHaptics.light()
+                                        if !notification.read {
+                                            markAsRead(notification)
+                                            FTHaptics.light()
+                                        }
                                     }
                                 
                                 Divider()
@@ -134,24 +117,6 @@ struct InboxView: View {
                 await loadNotifications()
             }
         }
-        .onChange(of: selectedFilter) { _ in
-            Task {
-                await loadNotifications()
-            }
-        }
-    }
-    
-    private func countFor(_ filter: NotificationFilter) -> Int {
-        switch filter {
-        case .all:
-            return appState.notifications.count
-        case .unread:
-            return appState.notifications.filter { !$0.read }.count
-        case .posts:
-            return appState.notifications.filter { $0.type == .newPost }.count
-        case .updates:
-            return appState.notifications.filter { $0.type == .runningLow || $0.type == .extended || $0.type == .expired }.count
-        }
     }
     
     private func loadNotifications() async {
@@ -170,22 +135,16 @@ struct InboxView: View {
         }
         
         do {
-            // Convert view filter to repository filter
-            // Note: There are two NotificationFilter enums - one in InboxView and one at module level
-            // We need to use the module-level one for the repository
-            let repoFilter: FoodTree.NotificationFilter? = {
-                switch selectedFilter {
-                case .all: return nil
-                case .unread: return FoodTree.NotificationFilter.unread
-                case .posts: return FoodTree.NotificationFilter.posts
-                case .updates: return FoodTree.NotificationFilter.updates
-                }
-            }()
-            
-            let notifications = try await repository.fetchNotifications(filter: repoFilter)
+            // Only fetch unread notifications
+            let notifications = try await repository.fetchNotifications(filter: .unread)
             
             await MainActor.run {
                 appState.notifications = notifications
+                isLoading = false
+            }
+        } catch is CancellationError {
+            // Ignore cancellation errors from refreshable
+            await MainActor.run {
                 isLoading = false
             }
         } catch {
@@ -198,10 +157,10 @@ struct InboxView: View {
     }
     
     private func markAsRead(_ notification: AppNotification) {
-        Task {
+        Task { @MainActor in
             do {
                 try await repository.markAsRead(notificationId: notification.id)
-                // Update local state
+                // Update local state on main actor
                 if let index = appState.notifications.firstIndex(where: { $0.id == notification.id }) {
                     appState.notifications[index].read = true
                 }
@@ -212,15 +171,21 @@ struct InboxView: View {
     }
     
     private func markAllAsRead() {
-        Task {
+        Task { @MainActor in
             do {
+                // Immediately clear all unread notifications from local state
+                // This makes them disappear from the UI instantly
+                appState.notifications.removeAll { !$0.read }
+                
+                // Then mark all as read in the database
                 try await repository.markAllAsRead()
-                // Update local state
-                for index in appState.notifications.indices {
-                    appState.notifications[index].read = true
-                }
+                
+                // Reload to ensure database is in sync
+                await loadNotifications()
             } catch {
                 print("Failed to mark all as read: \(error.localizedDescription)")
+                // If database update fails, reload to restore state
+                await loadNotifications()
             }
         }
     }
@@ -346,19 +311,17 @@ struct NotificationRow: View {
 
 // MARK: - Empty Inbox View
 struct EmptyInboxView: View {
-    let filter: InboxView.NotificationFilter
-    
     var body: some View {
         VStack(spacing: 20) {
-            Image(systemName: iconName)
+            Image(systemName: "checkmark.circle")
                 .font(.system(size: 64))
                 .foregroundColor(.inkMuted.opacity(0.3))
             
-            Text(emptyTitle)
+            Text("You're all caught up!")
                 .font(.system(size: 20, weight: .semibold))
                 .foregroundColor(.inkPrimary)
             
-            Text(emptyMessage)
+            Text("Check back later for new updates")
                 .font(.system(size: 15))
                 .foregroundColor(.inkSecondary)
                 .multilineTextAlignment(.center)
@@ -366,33 +329,6 @@ struct EmptyInboxView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.bgElev1)
-    }
-    
-    private var iconName: String {
-        switch filter {
-        case .all: return "tray"
-        case .unread: return "checkmark.circle"
-        case .posts: return "leaf"
-        case .updates: return "bell.slash"
-        }
-    }
-    
-    private var emptyTitle: String {
-        switch filter {
-        case .all: return "No notifications yet"
-        case .unread: return "You're all caught up!"
-        case .posts: return "No new posts"
-        case .updates: return "No updates"
-        }
-    }
-    
-    private var emptyMessage: String {
-        switch filter {
-        case .all: return "We'll notify you when there's free food nearby"
-        case .unread: return "Check back later for new updates"
-        case .posts: return "New food posts will appear here"
-        case .updates: return "Post updates will appear here"
-        }
     }
 }
 

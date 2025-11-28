@@ -1,5 +1,5 @@
 // =====================================================
-// FoodTree Edge Function: notify_users
+// TreeBites Edge Function: notify_users
 // =====================================================
 // Centralized notification fan-out service
 // Handles in-app notifications and push notifications
@@ -121,17 +121,20 @@ serve(async (req) => {
       for (const tokenRecord of pushTokens) {
         try {
           if (tokenRecord.platform === 'ios') {
-            // TODO: Send to APNs
-            // await sendApnNotification(tokenRecord.token, {
-            //   title: request.title,
-            //   body: request.body,
-            //   data: {
-            //     post_id: request.post_id,
-            //     ...request.data
-            //   }
-            // })
-            console.log(`📲 [STUB] Would send APNs to: ${tokenRecord.token.substring(0, 8)}...`)
-            pushSuccess++
+            try {
+              await sendApnNotification(tokenRecord.token, {
+                title: request.title,
+                body: request.body,
+                data: {
+                  post_id: request.post_id,
+                  ...request.data
+                }
+              })
+              pushSuccess++
+            } catch (apnsError) {
+              console.error(`❌ APNs error for token ${tokenRecord.token.substring(0, 8)}...:`, apnsError)
+              pushFailed++
+            }
           } else if (tokenRecord.platform === 'android') {
             // TODO: Send to FCM
             // await sendFcmNotification(tokenRecord.token, {
@@ -158,8 +161,7 @@ serve(async (req) => {
         in_app_notifications_created: insertedNotifications?.length || 0,
         push_tokens_found: pushTokens?.length || 0,
         push_sent: pushSuccess,
-        push_failed: pushFailed,
-        push_note: 'Push notifications are stubbed - implement APNs/FCM integration'
+        push_failed: pushFailed
       }),
       { 
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -189,27 +191,148 @@ serve(async (req) => {
 /**
  * Send notification via Apple Push Notification service
  * 
- * Requirements:
- * 1. APNs auth key (.p8 file) from Apple Developer account
- * 2. Team ID and Key ID
- * 3. Bundle ID (com.stanford.foodtree)
+ * Requirements (set as environment variables in Supabase Dashboard > Edge Functions > Secrets):
+ * 1. APNS_KEY_ID - Key ID from Apple Developer account (e.g., "ABC123DEFG")
+ * 2. APNS_TEAM_ID - Team ID from Apple Developer account (e.g., "XYZ987WUV")
+ * 3. APNS_KEY - The .p8 auth key file content (full text including BEGIN/END lines)
+ * 4. APNS_BUNDLE_ID - Bundle ID (e.g., "com.stanford.foodtree")
+ * 5. APNS_PRODUCTION - "true" for production, "false" for sandbox (default: false)
  * 
- * Implementation guide:
- * - Use jose library for JWT signing
- * - POST to https://api.push.apple.com/3/device/{token}
- * - Headers: authorization (Bearer JWT), apns-topic (bundle ID)
- * - Body: { "aps": { "alert": { "title": ..., "body": ... }, "sound": "default" } }
+ * To get APNs credentials:
+ * 1. Go to https://developer.apple.com/account/resources/authkeys/list
+ * 2. Create a new key with "Apple Push Notifications service (APNs)" enabled
+ * 3. Download the .p8 file
+ * 4. Note the Key ID and your Team ID
+ * 5. Set these as secrets in Supabase Dashboard
  */
 async function sendApnNotification(deviceToken: string, payload: any): Promise<void> {
-  // TODO: Implement APNs integration
-  // const keyId = Deno.env.get('APNS_KEY_ID')
-  // const teamId = Deno.env.get('APNS_TEAM_ID')
-  // const keyPath = Deno.env.get('APNS_KEY_PATH')
+  const keyId = Deno.env.get('APNS_KEY_ID')
+  const teamId = Deno.env.get('APNS_TEAM_ID')
+  const apnsKey = Deno.env.get('APNS_KEY') // Full .p8 file content
+  const bundleId = Deno.env.get('APNS_BUNDLE_ID') || 'com.stanford.foodtree'
+  const isProduction = Deno.env.get('APNS_PRODUCTION') === 'true'
   
-  // Generate JWT token
-  // Send POST request to APNs
+  // Check if APNs is configured
+  if (!keyId || !teamId || !apnsKey) {
+    console.warn('⚠️ APNs not configured - skipping push notification.')
+    console.warn('   Set APNS_KEY_ID, APNS_TEAM_ID, and APNS_KEY as Supabase secrets.')
+    return // Don't throw error, just skip gracefully
+  }
   
-  throw new Error('APNs not implemented yet')
+  try {
+    // Generate JWT token for APNs authentication
+    const jwt = await generateAPNsJWT(keyId, teamId, apnsKey)
+    
+    // Determine APNs endpoint (production or sandbox)
+    const apnsHost = isProduction 
+      ? 'api.push.apple.com' 
+      : 'api.sandbox.push.apple.com'
+    
+    // Build notification payload
+    const apnsPayload = {
+      aps: {
+        alert: {
+          title: payload.title,
+          body: payload.body
+        },
+        sound: 'default',
+        badge: 1
+      },
+      ...payload.data // Include custom data (post_id, etc.)
+    }
+    
+    // Send to APNs
+    const url = `https://${apnsHost}/3/device/${deviceToken}`
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${jwt}`,
+        'apns-topic': bundleId,
+        'apns-priority': '10',
+        'apns-push-type': 'alert',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(apnsPayload)
+    })
+    
+    if (!response.ok) {
+      const errorText = await response.text()
+      throw new Error(`APNs error (${response.status}): ${errorText}`)
+    }
+    
+    console.log(`✅ Sent APNs notification to ${deviceToken.substring(0, 8)}...`)
+  } catch (error) {
+    console.error('❌ APNs send error:', error)
+    throw error
+  }
+}
+
+/**
+ * Generate JWT token for APNs authentication using ES256
+ * 
+ * This implementation uses the Web Crypto API available in Deno
+ * The privateKey should be the full .p8 file content including BEGIN/END lines
+ */
+async function generateAPNsJWT(keyId: string, teamId: string, privateKey: string): Promise<string> {
+  try {
+    // Convert PEM key to ArrayBuffer for Web Crypto API
+    // Remove header/footer and whitespace
+    const keyPEM = privateKey
+      .replace(/-----BEGIN PRIVATE KEY-----/g, '')
+      .replace(/-----END PRIVATE KEY-----/g, '')
+      .replace(/\s/g, '')
+    
+    // Decode base64 to get the key bytes
+    const keyBytes = Uint8Array.from(atob(keyPEM), c => c.charCodeAt(0))
+    
+    // Import the key for signing
+    const cryptoKey = await crypto.subtle.importKey(
+      'pkcs8',
+      keyBytes,
+      {
+        name: 'ECDSA',
+        namedCurve: 'P-256'
+      },
+      false,
+      ['sign']
+    )
+    
+    // Create JWT header and payload
+    const header = { alg: 'ES256', kid: keyId, typ: 'JWT' }
+    const now = Math.floor(Date.now() / 1000)
+    const payload = { iss: teamId, iat: now }
+    
+    // Base64URL encode
+    const base64UrlEncode = (str: string): string => {
+      return btoa(str)
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_')
+        .replace(/=/g, '')
+    }
+    
+    const encodedHeader = base64UrlEncode(JSON.stringify(header))
+    const encodedPayload = base64UrlEncode(JSON.stringify(payload))
+    const unsignedToken = `${encodedHeader}.${encodedPayload}`
+    
+    // Sign with ES256
+    const signature = await crypto.subtle.sign(
+      { name: 'ECDSA', hash: 'SHA-256' },
+      cryptoKey,
+      new TextEncoder().encode(unsignedToken)
+    )
+    
+    // Convert signature to base64url
+    const signatureArray = Array.from(new Uint8Array(signature))
+    const signatureBase64 = btoa(String.fromCharCode(...signatureArray))
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=/g, '')
+    
+    return `${unsignedToken}.${signatureBase64}`
+  } catch (error) {
+    console.error('❌ Failed to generate APNs JWT:', error)
+    throw new Error(`JWT generation failed: ${error.message}`)
+  }
 }
 
 /**

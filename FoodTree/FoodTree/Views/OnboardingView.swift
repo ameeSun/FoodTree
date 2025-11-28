@@ -1,11 +1,14 @@
 //
 //  OnboardingView.swift
-//  FoodTree
+//  TreeBites
 //
 //  Onboarding flow with permissions requests
 //
 
 import SwiftUI
+import Supabase
+import PostgREST
+import CoreLocation
 
 struct OnboardingView: View {
     @EnvironmentObject var appState: AppState
@@ -15,7 +18,7 @@ struct OnboardingView: View {
     let pages: [OnboardingPage] = [
         OnboardingPage(
             icon: "leaf.circle.fill",
-            title: "Welcome to FoodTree 🌳",
+            title: "Welcome to TreeBites 🌳",
             description: "Discover free food on campus and help reduce waste",
             color: .brandPrimary
         ),
@@ -269,28 +272,25 @@ struct PermissionsView: View {
                 nextStep()
             }
         } else {
-            // Request notification permission
-            notificationManager.requestAuthorization()
-            
-            // Check status and update preferences after user responds
-            Task { @MainActor in
-                // Wait for user to respond to permission dialog
-                try? await Task.sleep(nanoseconds: 500_000_000) // 0.5 seconds
+            // Request notification permission with completion handler
+            // This ensures we wait for the actual user response, not just a timer
+            notificationManager.requestAuthorization { granted in
                 
-                // Re-check authorization status
-                notificationManager.checkAuthorizationStatus()
-                
-                // Check if permission was granted
-                let granted = notificationManager.authorizationStatus == .authorized
-                appState.hasNotificationPermission = granted
-                
-                // If granted, update user's notification preferences in database
-                if granted {
-                    await updateNotificationPreferences(enabled: true)
+                Task { @MainActor in
+                    // Update app state
+                    self.appState.hasNotificationPermission = granted
+                    
+                    // Re-check authorization status to ensure it's synced
+                    self.notificationManager.checkAuthorizationStatus()
+                    
+                    // If granted, update user's notification preferences in database
+                    if granted {
+                        await self.updateNotificationPreferences(enabled: true)
+                    }
+                    
+                    // Move to next step after handling permission
+                    self.nextStep()
                 }
-                
-                // Move to next step
-                nextStep()
             }
         }
     }

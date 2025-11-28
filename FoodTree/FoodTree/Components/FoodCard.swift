@@ -1,6 +1,6 @@
 //
 //  FoodCard.swift
-//  FoodTree
+//  TreeBites
 //
 //  Reusable food card component with multiple sizes
 //

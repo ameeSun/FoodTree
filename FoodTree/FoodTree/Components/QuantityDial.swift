@@ -1,6 +1,6 @@
 //
 //  QuantityDial.swift
-//  FoodTree
+//  TreeBites
 //
 //  Interactive circular quantity indicator
 //

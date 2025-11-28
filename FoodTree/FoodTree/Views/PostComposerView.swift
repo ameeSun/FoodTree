@@ -1,6 +1,6 @@
 //
 //  PostComposerView.swift
-//  FoodTree
+//  TreeBites
 //
 //  Multi-step post composer with camera, tags, and location
 //
@@ -1081,35 +1081,17 @@ struct PostSuccessView: View {
                 
                 Spacer()
                 
-                VStack(spacing: 12) {
-                    Button(action: {
-                        // Share link (stub)
-                        FTHaptics.light()
-                    }) {
-                        HStack {
-                            Image(systemName: "square.and.arrow.up")
-                            Text("Share link")
-                        }
+                Button(action: {
+                    FTHaptics.light()
+                    isPresented = false
+                }) {
+                    Text("Done")
                         .font(.system(size: 16, weight: .semibold))
-                        .foregroundColor(.brandPrimary)
+                        .foregroundColor(.white)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 16)
-                        .background(Color.white)
+                        .background(Color.white.opacity(0.2))
                         .clipShape(RoundedRectangle(cornerRadius: FTLayout.cornerRadiusButton))
-                    }
-                    
-                    Button(action: {
-                        FTHaptics.light()
-                        isPresented = false
-                    }) {
-                        Text("Done")
-                            .font(.system(size: 16, weight: .semibold))
-                            .foregroundColor(.white)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 16)
-                            .background(Color.white.opacity(0.2))
-                            .clipShape(RoundedRectangle(cornerRadius: FTLayout.cornerRadiusButton))
-                    }
                 }
                 .padding(.bottom, 40)
             }

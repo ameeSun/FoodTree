@@ -1,6 +1,6 @@
 //
 //  ReportRepository.swift
-//  FoodTree
+//  TreeBites
 //
 //  Repository for reporting posts
 //
@@ -16,7 +16,8 @@ class ReportRepository: ObservableObject {
     // MARK: - Submit Report
     
     /// Submit a report for a food post
-    func submitReport(postId: String, reason: ReportReason, comment: String?) async throws {
+    /// Returns true if post was deleted, false otherwise
+    func submitReport(postId: String, reason: ReportReason, comment: String?) async throws -> Bool {
         guard let userId = AuthManager.shared.currentUserId else {
             throw NetworkError.unauthorized
         }
@@ -49,6 +50,51 @@ class ReportRepository: ObservableObject {
             .execute()
         
         print("✅ ReportRepo: Report submitted for post \(postId)")
+        
+        // Check if post should be deleted
+        var shouldDelete = false
+        
+        // If report has a comment/description, delete immediately
+        if let comment = comment, !comment.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            shouldDelete = true
+            print("🗑️ ReportRepo: Report has comment, deleting post immediately")
+        } else {
+            // Check if post has 2+ reports without comments
+            let reportCount = try await getReportCountWithoutComments(postId: postId)
+            if reportCount >= 2 {
+                shouldDelete = true
+                print("🗑️ ReportRepo: Post has \(reportCount) reports without comments, deleting post")
+            }
+        }
+        
+        if shouldDelete {
+            let postRepository = FoodPostRepository()
+            try await postRepository.deletePost(postId: postId)
+            return true
+        }
+        
+        return false
+    }
+    
+    // MARK: - Helpers
+    
+    /// Get count of reports for a post that have no comment
+    private func getReportCountWithoutComments(postId: String) async throws -> Int {
+        // Fetch all reports for the post
+        let reports: [ReportDTO] = try await supabase.database
+            .from("reports")
+            .select("*")
+            .eq("post_id", value: postId)
+            .execute()
+            .value
+        
+        // Count reports where comment is null or empty
+        let countWithoutComments = reports.filter { report in
+            guard let comment = report.comment else { return true }
+            return comment.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }.count
+        
+        return countWithoutComments
     }
 }
 

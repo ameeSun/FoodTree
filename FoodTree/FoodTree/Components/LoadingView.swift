@@ -1,6 +1,6 @@
 //
 //  LoadingView.swift
-//  FoodTree
+//  TreeBites
 //
 //  Loading states and progress indicators
 //

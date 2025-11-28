@@ -1,8 +1,8 @@
 -- =====================================================
--- FoodTree Database Schema - Initial Migration
+-- TreeBites Database Schema - Initial Migration
 -- =====================================================
 -- This migration creates all tables, enums, functions, and policies
--- for the FoodTree application.
+-- for the TreeBites application.
 --
 -- Prerequisites:
 -- 1. Row Level Security (RLS) must be enabled globally

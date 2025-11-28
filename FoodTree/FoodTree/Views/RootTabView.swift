@@ -1,6 +1,6 @@
 //
 //  RootTabView.swift
-//  FoodTree
+//  TreeBites
 //
 //  Root tab navigation with floating action button
 //

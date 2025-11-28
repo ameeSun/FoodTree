@@ -1,6 +1,6 @@
 //
 //  MockData.swift
-//  FoodTree
+//  TreeBites
 //
 //  Realistic Stanford campus demo data
 //

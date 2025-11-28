@@ -1,6 +1,6 @@
 //
-//  FoodTreeApp.swift
-//  FoodTree
+//  TreeBitesApp.swift
+//  TreeBites
 //
 //  A playful, elegant iOS app for discovering leftover food on campus
 //
@@ -8,11 +8,18 @@
 import SwiftUI
 import Supabase
 import Combine
+import UserNotifications
 
 @main
-struct FoodTreeApp: App {
+struct TreeBitesApp: App {
+    @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @StateObject private var appState = AppState()
     @StateObject private var authService = AuthService.shared
+    
+    init() {
+        // Set up notification delegate
+        UNUserNotificationCenter.current().delegate = NotificationManager.shared
+    }
     
     var body: some Scene {
         WindowGroup {
@@ -45,6 +52,25 @@ struct FoodTreeApp: App {
                 }
             }
         }
+    }
+}
+
+// MARK: - App Delegate for Remote Notifications
+class AppDelegate: NSObject, UIApplicationDelegate {
+    private let notificationManager = NotificationManager.shared
+    
+    func application(
+        _ application: UIApplication,
+        didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data
+    ) {
+        notificationManager.didRegisterForRemoteNotifications(deviceToken: deviceToken)
+    }
+    
+    func application(
+        _ application: UIApplication,
+        didFailToRegisterForRemoteNotificationsWithError error: Error
+    ) {
+        notificationManager.didFailToRegisterForRemoteNotifications(error: error)
     }
 }
 

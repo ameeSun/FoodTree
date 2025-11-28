@@ -1,6 +1,6 @@
 //
 //  OrganizerDashboardView.swift
-//  FoodTree
+//  TreeBites
 //
 //  Dashboard for organizers to manage their posts
 //

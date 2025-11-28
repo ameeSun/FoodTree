@@ -1,5 +1,5 @@
 -- =====================================================
--- FoodTree Seed Data
+-- TreeBites Seed Data
 -- =====================================================
 -- This file seeds the database with Stanford campus data
 -- and sample posts for local development and testing.

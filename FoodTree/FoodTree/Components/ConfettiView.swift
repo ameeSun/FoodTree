@@ -1,6 +1,6 @@
 //
 //  ConfettiView.swift
-//  FoodTree
+//  TreeBites
 //
 //  Playful confetti animation for success moments
 //

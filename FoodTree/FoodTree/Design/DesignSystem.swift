@@ -1,6 +1,6 @@
 //
 //  DesignSystem.swift
-//  FoodTree
+//  TreeBites
 //
 //  Design tokens and system constants
 //

@@ -1,6 +1,6 @@
 //
 //  ProfileView.swift
-//  FoodTree
+//  TreeBites
 //
 //  User profile and settings
 //
@@ -9,7 +9,6 @@ import SwiftUI
 
 struct ProfileView: View {
     @EnvironmentObject var appState: AppState
-    @State private var showSettings = false
     @State private var showOrganizerDashboard = false
     @State private var showCommunityGuidelines = false
     
@@ -92,35 +91,6 @@ struct ProfileView: View {
                         .padding(.horizontal, FTLayout.paddingM)
                     }
                     
-                    if userRole == .student {
-                        // Settings button for students only
-                        Button(action: {
-                            showSettings = true
-                            FTHaptics.light()
-                        }) {
-                            HStack {
-                                Image(systemName: "gearshape.fill")
-                                    .font(.system(size: 18))
-                                    .foregroundColor(.brandPrimary)
-                                
-                                Text("Settings")
-                                    .font(.system(size: 16, weight: .medium))
-                                    .foregroundColor(.inkPrimary)
-                                
-                                Spacer()
-                                
-                                Image(systemName: "chevron.right")
-                                    .font(.system(size: 14, weight: .semibold))
-                                    .foregroundColor(.inkMuted)
-                            }
-                            .padding(FTLayout.paddingM)
-                            .background(Color.bgElev2Card)
-                            .clipShape(RoundedRectangle(cornerRadius: FTLayout.cornerRadiusCard))
-                            .ftShadow()
-                        }
-                        .padding(.horizontal, FTLayout.paddingM)
-                    }
-                    
                     Divider()
                         .padding(.horizontal, FTLayout.paddingM)
                     
@@ -154,7 +124,7 @@ struct ProfileView: View {
                     .padding(.horizontal, FTLayout.paddingM)
                     
                     // Version info
-                    Text("FoodTree v1.0.0 • Made at Stanford")
+                    Text("TreeBites v1.0.0 • Made at Stanford")
                         .font(.system(size: 13))
                         .foregroundColor(.inkMuted)
                         .padding(.top, 20)
@@ -164,9 +134,6 @@ struct ProfileView: View {
             .background(Color.bgElev1)
             .navigationTitle("Profile")
             .navigationBarTitleDisplayMode(.large)
-        }
-        .sheet(isPresented: $showSettings) {
-            SettingsView()
         }
         .sheet(isPresented: $showOrganizerDashboard) {
             OrganizerDashboardView()

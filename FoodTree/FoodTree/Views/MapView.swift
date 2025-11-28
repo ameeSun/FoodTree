@@ -1,6 +1,6 @@
 //
 //  MapView.swift
-//  FoodTree
+//  TreeBites
 //
 //  Main map view with food pins and bottom sheet
 //
@@ -60,28 +60,8 @@ struct MapView: View {
             
             // Top bar
             VStack(spacing: 0) {
-                HStack(spacing: 12) {
-                    // Search bar
-                    HStack(spacing: 8) {
-                        Image(systemName: "magnifyingglass")
-                            .font(.system(size: 16))
-                            .foregroundColor(.inkMuted)
-                        
-                        Text("Search buildings or events")
-                            .font(.system(size: 16))
-                            .foregroundColor(.inkMuted)
-                        
-                        Spacer()
-                    }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 12)
-                    .background(Color.bgElev2Card)
-                    .clipShape(RoundedRectangle(cornerRadius: FTLayout.cornerRadiusButton))
-                    .ftShadow()
-                    .onTapGesture {
-                        // Open search (stub)
-                        FTHaptics.light()
-                    }
+                HStack {
+                    Spacer()
                     
                     // Filter button
                     Button(action: {
