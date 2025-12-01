@@ -51,6 +51,7 @@ struct LoginView: View {
                         .keyboardType(.emailAddress)
                         .autocapitalization(.none)
                         .padding()
+                        .foregroundColor(.inkPrimary)
                         .background(Color.bgElev2Card)
                         .cornerRadius(12)
                         .overlay(
@@ -62,6 +63,7 @@ struct LoginView: View {
                     SecureField("Password", text: $password)
                         .padding()
                         .background(Color.bgElev2Card)
+                        .foregroundColor(.inkPrimary)
                         .cornerRadius(12)
                         .overlay(
                             RoundedRectangle(cornerRadius: 12)
@@ -73,6 +75,7 @@ struct LoginView: View {
                         SecureField("Confirm Password", text: $confirmPassword)
                             .padding()
                             .background(Color.bgElev2Card)
+                            .foregroundColor(.inkPrimary)
                             .cornerRadius(12)
                             .overlay(
                                 RoundedRectangle(cornerRadius: 12)
