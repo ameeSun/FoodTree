@@ -20,41 +20,28 @@ struct MapView: View {
         span: MKCoordinateSpan(latitudeDelta: 0.02, longitudeDelta: 0.02)
     )
     
-    private var allAnnotations: [MapAnnotationItem] {
-        var annotations: [MapAnnotationItem] = viewModel.posts.map { .foodPost(FoodPostAnnotation(post: $0)) }
-        if let userLocation = locationManager.location {
-            annotations.append(.userLocation(UserLocationAnnotation(coordinate: userLocation)))
-        }
-        return annotations
+    private var foodPostAnnotations: [FoodPostAnnotation] {
+        viewModel.posts.map { FoodPostAnnotation(post: $0) }
     }
     
     var body: some View {
         ZStack(alignment: .top) {
-            // Map
-            Map(coordinateRegion: $region, annotationItems: allAnnotations) { annotation in
-                let result: MapAnnotation<AnyView> = {
-                    switch annotation {
-                    case .foodPost(let postAnnotation):
-                        return MapAnnotation(coordinate: postAnnotation.coordinate) {
-                            AnyView(
-                                MapPinView(post: postAnnotation.post, isSelected: selectedPost?.id == postAnnotation.post.id)
-                                    .onTapGesture {
-                                        withAnimation(FTAnimation.spring) {
-                                            selectedPost = postAnnotation.post
-                                            sheetDetent = .mid
-                                            region.center = postAnnotation.coordinate
-                                        }
-                                        FTHaptics.light()
-                                    }
-                            )
+            // Map with food post annotations
+            Map(coordinateRegion: $region, 
+                showsUserLocation: true,
+                userTrackingMode: .none,
+                annotationItems: foodPostAnnotations) { annotation in
+                MapAnnotation(coordinate: annotation.coordinate) {
+                    MapPinView(post: annotation.post, isSelected: selectedPost?.id == annotation.post.id)
+                        .onTapGesture {
+                            withAnimation(FTAnimation.spring) {
+                                selectedPost = annotation.post
+                                sheetDetent = .mid
+                                region.center = annotation.coordinate
+                            }
+                            FTHaptics.light()
                         }
-                    case .userLocation(let userAnnotation):
-                        return MapAnnotation(coordinate: userAnnotation.coordinate) {
-                            AnyView(UserLocationPinView())
-                        }
-                    }
-                }()
-                return result
+                }
             }
             .ignoresSafeArea()
             
