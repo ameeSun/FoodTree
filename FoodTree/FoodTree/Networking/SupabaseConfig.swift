@@ -48,10 +48,11 @@ struct SupabaseConfig {
         
         // Fallback values (same for both DEBUG and RELEASE to prevent crashes)
         // These match the values in the Xcode project settings
-        let fallbackURL = "https://duluhjkiqoahshxhiyqz.supabase.co"
-        let fallbackKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR1bHVoamtpcW9haHNoeGhpeXF6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjI5MDg3NjQsImV4cCI6MjA3ODQ4NDc2NH0.x8HqNSpYojZ6iEds6IDZyQtOTx4eswEgqWOA7mFphjg"
+        // let fallbackURL = "https://duluhjkiqoahshxhiyqz.supabase.co"
+        // let fallbackKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR1bHVoamtpcW9haHNoeGhpeXF6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjI5MDg3NjQsImV4cCI6MjA3ODQ4NDc2NH0.x8HqNSpYojZ6iEds6IDZyQtOTx4eswEgqWOA7mFphjg"
         
         // Use fallback if values are missing (prevents crash in production)
+        /*
         if urlString.isEmpty {
             #if DEBUG
             print("⚠️ WARNING: Using hardcoded fallback URL. Info.plist values not found!")
@@ -71,10 +72,16 @@ struct SupabaseConfig {
             #endif
             key = fallbackKey
         }
+        */
+                
+        guard !urlString.isEmpty, !key.isEmpty else {
+            fatalError("""
+            ❌ Supabase configuration missing.
+            """)
+        }
         
         guard let url = URL(string: urlString) else {
-            // If URL is still invalid after fallback, this is a code error, so fatalError is appropriate
-            fatalError("❌ CRITICAL: Invalid Supabase URL format: \(urlString)")
+            fatalError("❌ Invalid Supabase URL format: \(urlString)")
         }
         
         #if DEBUG

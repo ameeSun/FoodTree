@@ -9,6 +9,7 @@ import SwiftUI
 import Foundation
 import Combine
 
+@MainActor
 struct InboxView: View {
     @EnvironmentObject var appState: AppState
     @StateObject private var repository = NotificationRepository()
@@ -135,40 +136,21 @@ struct InboxView: View {
             return
         }
         
-        // Check if user is authenticated
-        guard AuthManager.shared.isAuthenticated else {
-            await MainActor.run {
-                errorMessage = "Please sign in to view notifications"
-                isLoading = false
-            }
-            return
-        }
-        
-        await MainActor.run {
-            isLoading = true
-            errorMessage = nil
-        }
-        
+        isLoading = true
+        errorMessage = nil
+
         do {
-            // Only fetch unread notifications
             let notifications = try await repository.fetchNotifications(filter: .unread)
-            
-            await MainActor.run {
-                appState.notifications = notifications
-                isLoading = false
-            }
+            appState.notifications = notifications
+            isLoading = false
         } catch is CancellationError {
-            // Ignore cancellation errors from refreshable
-            await MainActor.run {
-                isLoading = false
-            }
+            isLoading = false
         } catch {
-            await MainActor.run {
-                errorMessage = "Failed to load notifications: \(error.localizedDescription)"
-                isLoading = false
-                // Don't clear existing notifications on error
-            }
+            // If there is no session, Supabase will throw — show a friendly message
+            errorMessage = "Please sign in to view notifications."
+            isLoading = false
         }
+
     }
     
     private func markAsRead(_ notification: AppNotification) {

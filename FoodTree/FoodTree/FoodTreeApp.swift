@@ -10,50 +10,51 @@ import Supabase
 import Combine
 import UserNotifications
 
+import SwiftUI
+import Supabase
+import Combine
+import UserNotifications
+
+@MainActor
 @main
 struct TreeBitesApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @StateObject private var appState = AppState()
     @StateObject private var authService = AuthService.shared
-    
+
     init() {
-        // Set up notification delegate
         UNUserNotificationCenter.current().delegate = NotificationManager.shared
     }
-    
+
     var body: some Scene {
         WindowGroup {
             Group {
                 if appState.hasCompletedOnboarding {
                     if authService.isAuthenticated {
                         RootTabView()
-                            .environmentObject(appState)
                     } else {
                         LoginView()
                     }
                 } else {
                     OnboardingView()
-                        .environmentObject(appState)
                 }
             }
+            .environmentObject(appState)
+            .environmentObject(authService)   
             .onAppear {
-                // Sync auth state role to app state if needed
-                Task { @MainActor in
-                    if let user = authService.currentUser {
-                        appState.userRole = user.role
-                    }
+                if let user = authService.currentUser {
+                    appState.userRole = user.role
                 }
             }
             .onChange(of: authService.currentUser) { user in
-                Task { @MainActor in
-                    if let user = user {
-                        appState.userRole = user.role
-                    }
+                if let user = user {
+                    appState.userRole = user.role
                 }
             }
         }
     }
 }
+
 
 // MARK: - App Delegate for Remote Notifications
 class AppDelegate: NSObject, UIApplicationDelegate {

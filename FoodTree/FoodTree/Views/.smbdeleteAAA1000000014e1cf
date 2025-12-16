@@ -127,38 +127,38 @@ struct PostComposerView: View {
             publishError = "Location is required"
             return
         }
-        
+
         guard AuthService.shared.isAuthenticated else {
             publishError = "You must be logged in to post food. Please sign in and try again."
             return
         }
-        
+
         guard let user = AuthService.shared.currentUser, user.role == .organizer else {
             publishError = "You are a student and unable to post. Only administrators can create food posts."
             return
         }
-        
+
         let trimmedTitle = viewModel.title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmedTitle.count >= 3 else { publishError = "Title must be at least 3 characters long"; return }
         guard trimmedTitle.count <= 200 else { publishError = "Title must be no more than 200 characters long"; return }
-        
+
         isPublishing = true
         publishError = nil
-        
+
         let finalTitle = trimmedTitle
-        
+
         Task { @MainActor in
             do {
                 let expiresAt = Calendar.current.date(byAdding: .minute, value: viewModel.expiryMinutes, to: Date())
                 let dietaryStrings = viewModel.dietaryTags.map { $0.rawValue }
-                
+
                 let imageDataArray = viewModel.photos.compactMap { $0.jpegData(compressionQuality: 0.8) }
                 guard !imageDataArray.isEmpty else {
                     publishError = "Please add at least one photo"
                     isPublishing = false
                     return
                 }
-                
+
                 let request = CreatePostRequest(
                     title: finalTitle,
                     description: viewModel.description.isEmpty ? nil : viewModel.description,
@@ -172,9 +172,9 @@ struct PostComposerView: View {
                     buildingName: viewModel.selectedBuilding,
                     pickupInstructions: viewModel.accessNotes.isEmpty ? nil : viewModel.accessNotes
                 )
-                
+
                 _ = try await repository.createPost(input: request)
-                
+
                 FTHaptics.success()
                 showSuccessView = true
                 isPublishing = false
@@ -189,7 +189,7 @@ struct PostComposerView: View {
             }
         }
     }
-}
+]
 
 // MARK: - Progress Bar
 struct ProgressBar: View {

@@ -9,18 +9,20 @@ import Foundation
 import Combine
 import Supabase
 
-@MainActor
 final class NotificationRepository: ObservableObject {
     private let supabase = SupabaseConfig.shared.client
     
+    private func requireUserId() async throws -> UUID {
+        let session = try await supabase.auth.session
+        return session.user.id
+    }
+
     // MARK: - Fetch Notifications
     
     /// Fetch notifications for current user with optional filtering
     func fetchNotifications(filter: NotificationFilter? = nil) async throws -> [AppNotification] {
-        guard let userId = AuthManager.shared.currentUserId else {
-            throw NetworkError.unauthorized
-        }
-        
+        let userId = try await requireUserId()
+
         var base = supabase.database
             .from("notifications")
             .select("*")
@@ -49,9 +51,8 @@ final class NotificationRepository: ObservableObject {
     
     /// Mark a notification as read
     func markAsRead(notificationId: String) async throws {
-        guard let userId = AuthManager.shared.currentUserId else {
-            throw NetworkError.unauthorized
-        }
+        let userId = try await requireUserId()
+
         
         // Verify notification belongs to user
         let notification: NotificationDTO = try await supabase.database
@@ -75,9 +76,7 @@ final class NotificationRepository: ObservableObject {
     
     /// Mark all notifications as read for current user
     func markAllAsRead() async throws {
-        guard let userId = AuthManager.shared.currentUserId else {
-            throw NetworkError.unauthorized
-        }
+        let userId = try await requireUserId()
         
         try await supabase.database
             .from("notifications")
@@ -91,9 +90,7 @@ final class NotificationRepository: ObservableObject {
     
     /// Get count of unread notifications
     func getUnreadCount() async throws -> Int {
-        guard let userId = AuthManager.shared.currentUserId else {
-            throw NetworkError.unauthorized
-        }
+        let userId = try await requireUserId()
         
         let response = try await supabase.database
             .from("notifications")

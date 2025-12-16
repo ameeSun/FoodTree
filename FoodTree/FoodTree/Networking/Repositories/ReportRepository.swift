@@ -9,7 +9,6 @@ import Foundation
 import Supabase
 import Combine
 
-@MainActor
 class ReportRepository: ObservableObject {
     private let supabase = SupabaseConfig.shared.client
     
@@ -18,9 +17,8 @@ class ReportRepository: ObservableObject {
     /// Submit a report for a food post
     /// Returns true if post was deleted, false otherwise
     func submitReport(postId: String, reason: ReportReason, comment: String?) async throws -> Bool {
-        guard let userId = AuthManager.shared.currentUserId else {
-            throw NetworkError.unauthorized
-        }
+        let session = try await SupabaseConfig.shared.client.auth.session
+        let userId = session.user.id
         
         // Map Swift enum to database enum string
         let reasonString: String

@@ -11,7 +11,12 @@ struct ProfileView: View {
     @EnvironmentObject var appState: AppState
     @State private var showOrganizerDashboard = false
     @State private var showCommunityGuidelines = false
-    
+    @State private var showDeleteConfirm1 = false
+    @State private var showDeleteConfirm2 = false
+    @State private var isDeletingAccount = false
+    @State private var deleteErrorMessage: String?
+    @State private var showDeleteError = false
+
     private var currentUser: UserProfile? {
         AuthService.shared.currentUser
     }
@@ -120,6 +125,17 @@ struct ProfileView: View {
                                 }
                             )
                         }
+                        
+                        SettingsRow(
+                            icon: "trash",
+                            title: isDeletingAccount ? "Deleting..." : "Delete Account",
+                            value: nil,
+                            destructive: true,
+                            action: {
+                                showDeleteConfirm1 = true
+                            }
+                        )
+                        .disabled(isDeletingAccount)
                     }
                     .padding(.horizontal, FTLayout.paddingM)
                     
@@ -134,6 +150,45 @@ struct ProfileView: View {
             .background(Color.bgElev1)
             .navigationTitle("Profile")
             .navigationBarTitleDisplayMode(.large)
+            .confirmationDialog(
+                "Delete your account?",
+                isPresented: $showDeleteConfirm1,
+                titleVisibility: .visible
+            ) {
+                Button("Continue", role: .destructive) { showDeleteConfirm2 = true }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("This will remove your profile info but keep your posts labeled as “Deleted user”.")
+            }
+            .confirmationDialog(
+                "This can’t be undone.",
+                isPresented: $showDeleteConfirm2,
+                titleVisibility: .visible
+            ) {
+                Button("Delete Account", role: .destructive) {
+                    Task {
+                        isDeletingAccount = true
+                        defer { isDeletingAccount = false }
+
+                        do {
+                            try await AccountService.shared.deleteAccount()
+                            // If deleteAccount() already signs out, you're done.
+                            // If not, you can call: await AuthService.shared.signOut()
+                        } catch {
+                            deleteErrorMessage = error.localizedDescription
+                            showDeleteError = true
+                        }
+                    }
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("You will be signed out and your profile will be anonymized.")
+            }
+            .alert("Couldn’t delete account", isPresented: $showDeleteError) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(deleteErrorMessage ?? "Please try again.")
+            }
         }
         .sheet(isPresented: $showOrganizerDashboard) {
             OrganizerDashboardView()

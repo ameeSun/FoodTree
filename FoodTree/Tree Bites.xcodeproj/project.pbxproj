@@ -14,9 +14,22 @@
 		891DE51C2EC44B960043DFB3 /* FoodTree.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = FoodTree.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		7C5B39B82EF1D9F000B71316 /* Exceptions for "FoodTree" folder in "FoodTree" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 891DE51B2EC44B960043DFB3 /* FoodTree */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		891DE51E2EC44B960043DFB3 /* FoodTree */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				7C5B39B82EF1D9F000B71316 /* Exceptions for "FoodTree" folder in "FoodTree" target */,
+			);
 			path = FoodTree;
 			sourceTree = "<group>";
 		};
@@ -265,6 +278,7 @@
 				DEVELOPMENT_TEAM = YNK8Q89Z66;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = FoodTree/Info.plist;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.food-and-drink";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Take photos of food you're posting to share with students.";
 				INFOPLIST_KEY_NSLocationAlwaysAndWhenInUseUsageDescription = "We use your location to notify you when free food becomes available nearby.";
@@ -308,6 +322,7 @@
 				DEVELOPMENT_TEAM = YNK8Q89Z66;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = FoodTree/Info.plist;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.food-and-drink";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Take photos of food you're posting to share with students.";
 				INFOPLIST_KEY_NSLocationAlwaysAndWhenInUseUsageDescription = "We use your location to notify you when free food becomes available nearby.";

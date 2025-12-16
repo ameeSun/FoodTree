@@ -538,32 +538,16 @@ class OrganizerViewModel: ObservableObject {
     
     func loadMyPosts() async {
         // Check if user is authenticated
-        guard AuthManager.shared.isAuthenticated else {
-            await MainActor.run {
-                errorMessage = "Please sign in to view your posts"
+        isLoading = true
+                errorMessage = nil
+
+                do {
+                    posts = try await repository.fetchMyPosts()
+                } catch {
+                    errorMessage = "Please sign in to view your posts."
+                }
+
                 isLoading = false
-            }
-            return
-        }
-        
-        await MainActor.run {
-            isLoading = true
-            errorMessage = nil
-        }
-        
-        do {
-            let fetchedPosts = try await repository.fetchMyPosts()
-            
-            await MainActor.run {
-                posts = fetchedPosts
-                isLoading = false
-            }
-        } catch {
-            await MainActor.run {
-                errorMessage = "Failed to load posts: \(error.localizedDescription)"
-                isLoading = false
-            }
-        }
     }
     
     func markAsLow(_ post: FoodPost) {

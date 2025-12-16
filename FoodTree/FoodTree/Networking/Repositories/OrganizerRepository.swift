@@ -10,18 +10,19 @@ import Observation
 import Combine
 import Supabase
 
-@MainActor
 class OrganizerRepository: ObservableObject {
     
     private let supabase = SupabaseConfig.shared.client
     
+    private func requireUserId() async throws -> UUID {
+        let session = try await supabase.auth.session
+        return session.user.id
+    }
     // MARK: - Verification Requests
     
     /// Request organizer verification
     func requestVerification(orgName: String, description: String?, proofUrl: String?) async throws {
-        guard let userId = AuthManager.shared.currentUserId else {
-            throw NetworkError.unauthorized
-        }
+        let userId = try await requireUserId()
         
         let request = VerificationRequestDTO(
             userId: userId.uuidString,
@@ -41,9 +42,7 @@ class OrganizerRepository: ObservableObject {
     
     /// Fetch current user's verification status
     func fetchVerificationStatus() async throws -> VerificationStatus? {
-        guard let userId = AuthManager.shared.currentUserId else {
-            throw NetworkError.unauthorized
-        }
+        let userId = try await requireUserId()
         
         // Fetch most recent verification request
         let requests: [VerificationRequestDTO] = try await supabase.database

@@ -10,11 +10,14 @@ import Supabase
 import CoreLocation
 import Combine
 
-@MainActor
 class FoodPostRepository: ObservableObject {
     private let supabase = SupabaseConfig.shared.client
     let objectWillChange = PassthroughSubject<Void, Never>()
     
+    private func requireUserId() async throws -> UUID {
+        let session = try await supabase.auth.session
+        return session.user.id
+    }
     // MARK: - Fetch Posts
     
     /// Fetch nearby posts with filters
@@ -121,9 +124,7 @@ class FoodPostRepository: ObservableObject {
     
     /// Create a new food post with images
     func createPost(input: CreatePostRequest) async throws -> FoodPost {
-        guard let creatorId = AuthManager.shared.currentUserId else {
-            throw NetworkError.unauthorized
-        }
+        let creatorId = try await requireUserId()
         
         // 1. Upload images to storage
         var uploadedPaths: [(path: String, sortOrder: Int)] = []
@@ -297,9 +298,7 @@ class FoodPostRepository: ObservableObject {
     
     /// Toggle "On My Way" status
     func toggleOnMyWay(postId: String, etaMinutes: Int? = nil) async throws -> Bool {
-        guard let userId = AuthManager.shared.currentUserId else {
-            throw NetworkError.unauthorized
-        }
+        let userId = try await requireUserId()
         
         // Check if already marked
         let existing: [OnMyWayDTO]? = try? await supabase.database
@@ -341,9 +340,7 @@ class FoodPostRepository: ObservableObject {
     
     /// Save/unsave a post
     func toggleSavedPost(postId: String) async throws -> Bool {
-        guard let userId = AuthManager.shared.currentUserId else {
-            throw NetworkError.unauthorized
-        }
+        let userId = try await requireUserId()
         
         // Check if already saved
         let existing: [SavedPostDTO]? = try? await supabase.database
@@ -379,9 +376,8 @@ class FoodPostRepository: ObservableObject {
     
     /// Fetch user's saved posts
     func fetchSavedPosts() async throws -> [FoodPost] {
-        guard let userId = AuthManager.shared.currentUserId else {
-            throw NetworkError.unauthorized
-        }
+        let userId = try await requireUserId()
+
         
         // Fetch saved post IDs
         let saved: [SavedPostDTO] = try await supabase.database
@@ -414,9 +410,7 @@ class FoodPostRepository: ObservableObject {
     
     /// Fetch posts created by current user
     func fetchMyPosts() async throws -> [FoodPost] {
-        guard let userId = AuthManager.shared.currentUserId else {
-            throw NetworkError.unauthorized
-        }
+        let userId = try await requireUserId()
         
         let dtos: [FoodPostDTO] = try await supabase.database
             .from("food_posts")

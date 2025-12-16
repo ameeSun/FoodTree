@@ -162,6 +162,7 @@ class FeedViewModel: ObservableObject {
     
     func loadPosts(locationManager: LocationManager, isRefresh: Bool = false) async {
         // Clear error message at start of load (unless it's a refresh, then keep existing posts)
+        
         if !isRefresh {
             await MainActor.run {
                 self.isLoading = true

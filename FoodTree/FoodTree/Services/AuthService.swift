@@ -252,3 +252,7 @@ class AuthService: ObservableObject {
         }
     }
 }
+extension AuthService {
+    @MainActor
+    var currentUserId: UUID? { currentUser?.id }
+}
