@@ -7,6 +7,8 @@ struct LoginView: View {
     @State private var confirmPassword: String = ""
     @State private var selectedRole: UserRole? = nil
     @State private var isSignUpMode = false
+    @AppStorage("hasAcceptedEULA") private var hasAcceptedEULA = false
+    @State private var showTermsSheet = false
     
     var body: some View {
         ZStack {
@@ -110,8 +112,14 @@ struct LoginView: View {
                                 )
                             }
                         }
+                        TermsAcceptanceView(
+                            hasAcceptedEULA: $hasAcceptedEULA,
+                            showTermsSheet: $showTermsSheet
+                        )
                     }
                     
+                    
+                                        
                     // Submit Button
                     Button(action: {
                         Task {
@@ -122,6 +130,10 @@ struct LoginView: View {
                                 }
                                 guard let role = selectedRole else {
                                     authService.errorMessage = "Please select a role"
+                                    return
+                                }
+                                guard hasAcceptedEULA else {
+                                    authService.errorMessage = "Please agree to the Tree Bites EULA and zero-tolerance policy to create an account"
                                     return
                                 }
                                 _ = await authService.signUp(email: email, password: password, role: role)
@@ -139,7 +151,11 @@ struct LoginView: View {
                         }
                     }
                     .buttonStyle(PrimaryButtonStyle())
-                    .disabled(email.isEmpty || password.isEmpty || (isSignUpMode && (confirmPassword.isEmpty || selectedRole == nil)))
+                    .disabled(
+                        email.isEmpty ||
+                        password.isEmpty ||
+                        (isSignUpMode && (confirmPassword.isEmpty || selectedRole == nil || !hasAcceptedEULA))
+                    )
                     
                     // Toggle Login/Sign-up
                     Button(action: {
@@ -203,6 +219,44 @@ struct AuthErrorBanner: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Error: \(message)")
+    }
+}
+
+struct TermsAcceptanceView: View {
+    @Binding var hasAcceptedEULA: Bool
+    @Binding var showTermsSheet: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Toggle(isOn: $hasAcceptedEULA) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("I agree to the Tree Bites EULA and zero-tolerance policy against objectionable or abusive content.")
+                        .font(.subheadline)
+                        .foregroundColor(.inkPrimary)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    Button(action: { showTermsSheet = true }) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "doc.text.magnifyingglass")
+                                .foregroundColor(.brandPrimary)
+                            Text("View Terms & Safety Policy")
+                                .font(.footnote)
+                                .fontWeight(.semibold)
+                                .foregroundColor(.brandPrimary)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .toggleStyle(.switch)
+            .tint(.brandPrimary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.top, 8)
+        .sheet(isPresented: $showTermsSheet) {
+            TermsEULAView()
+        }
+        .accessibilityElement(children: .combine)
     }
 }
 
