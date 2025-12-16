@@ -39,7 +39,10 @@ class AuthService: ObservableObject {
             errorMessage = "Please use a Stanford email (@stanford.edu)"
             return false
         }
-        
+        guard password.count >= 6 else {
+            errorMessage = "Password must be at least 6 characters long."
+            return false
+        }
         isLoading = true
         errorMessage = nil
         
@@ -109,7 +112,8 @@ class AuthService: ObservableObject {
             return true
         } catch {
             isLoading = false
-            let errorDescription = error.localizedDescription.lowercased()
+            let detailedDescription = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            let errorDescription = detailedDescription.lowercased()
             
             // Handle specific error cases
             if errorDescription.contains("already registered") || 
@@ -119,9 +123,10 @@ class AuthService: ObservableObject {
             } else if errorDescription.contains("email") && errorDescription.contains("invalid") {
                 errorMessage = "Please enter a valid Stanford email address."
             } else if errorDescription.contains("password") {
-                errorMessage = "Password must be at least 6 characters long."
+                errorMessage = detailedDescription
             } else {
-                errorMessage = "Sign up failed: \(error.localizedDescription)"
+                let fallbackMessage = detailedDescription.isEmpty ? "Sign up failed. Please try again." : detailedDescription
+                errorMessage = "Sign up failed: \(fallbackMessage)"
             }
             return false
         }

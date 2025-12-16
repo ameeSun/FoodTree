@@ -46,6 +46,11 @@ struct LoginView: View {
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     
+                    // Error Banner
+                    if let error = authService.errorMessage {
+                        AuthErrorBanner(message: error)
+                    }
+                    
                     // Email Field
                     TextField("sunet@stanford.edu", text: $email)
                         .keyboardType(.emailAddress)
@@ -156,13 +161,7 @@ struct LoginView: View {
                         .font(.subheadline)
                     }
                     
-                    // Error Message
-                    if let error = authService.errorMessage {
-                        Text(error)
-                            .foregroundColor(.stateError)
-                            .font(.caption)
-                            .multilineTextAlignment(.center)
-                    }
+                    
                 }
                 .padding()
                 .background(Color.bgElev2Card)
@@ -173,6 +172,37 @@ struct LoginView: View {
             }
             .padding(24)
         }
+    }
+}
+
+struct AuthErrorBanner: View {
+    let message: String
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundColor(.stateError)
+                .font(.system(size: 18, weight: .semibold))
+
+            Text(message)
+                .font(.subheadline)
+                .foregroundColor(.inkPrimary)
+                .multilineTextAlignment(.leading)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Spacer(minLength: 0)
+        }
+        .padding(12)
+        .background(Color.stateError.opacity(0.12))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(Color.stateError.opacity(0.6), lineWidth: 1)
+        )
+        .cornerRadius(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Error: \(message)")
     }
 }
 
