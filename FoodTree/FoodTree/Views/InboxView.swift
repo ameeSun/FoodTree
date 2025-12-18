@@ -15,11 +15,16 @@ struct InboxView: View {
     @StateObject private var repository = NotificationRepository()
     @State private var isLoading = false
     @State private var errorMessage: String?
-    @State private var justMarkedAllRead = false // Flag to prevent immediate reload
+    @State private var isMarkingAllRead = false
     
-    // Only show unread notifications
-    var filteredNotifications: [AppNotification] {
-        return appState.notifications.filter { !$0.read }
+    // All notifications (unread and read) so history remains visible
+    var allNotifications: [AppNotification] {
+        appState.notifications
+    }
+    
+    // For badge and button state
+    var unreadNotifications: [AppNotification] {
+        appState.notifications.filter { !$0.read }
     }
     
     var body: some View {
@@ -52,12 +57,12 @@ struct InboxView: View {
                         .buttonStyle(.borderedProminent)
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else if filteredNotifications.isEmpty {
+                } else if allNotifications.isEmpty {
                     EmptyInboxView()
                 } else {
                     ScrollView {
                         LazyVStack(spacing: 0) {
-                            ForEach(filteredNotifications) { notification in
+                            ForEach(allNotifications) { notification in
                                 NotificationRow(notification: notification)
                                     .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                                         if !notification.read {
@@ -93,37 +98,30 @@ struct InboxView: View {
                     }
                     .background(Color.bgElev1)
                     .refreshable {
-                        // Don't allow refresh if we just marked all as read
-                        guard !justMarkedAllRead else {
-                            return
-                        }
-                        await loadNotifications()
+                        
                     }
                 }
             }
             .navigationTitle("Inbox")
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
-                if !filteredNotifications.isEmpty {
+                if !allNotifications.isEmpty {
                     ToolbarItem(placement: .navigationBarTrailing) {
                         Button(action: {
-                            markAllAsRead()
+                            Task { await markAllAsRead() }
                             FTHaptics.medium()
                         }) {
                             Text("Mark all read")
                                 .font(.system(size: 15))
                                 .foregroundColor(.brandPrimary)
                         }
+                        .disabled(isMarkingAllRead || unreadNotifications.isEmpty)
                     }
                 }
             }
         }
         .onAppear {
-            // Don't reload if we just marked all as read
-            guard !justMarkedAllRead else {
-                justMarkedAllRead = false // Reset flag after one skip
-                return
-            }
+            
             Task {
                 await loadNotifications()
             }
@@ -131,16 +129,13 @@ struct InboxView: View {
     }
     
     private func loadNotifications() async {
-        // Don't reload if we just marked all as read
-        guard !justMarkedAllRead else {
-            return
-        }
+        
         
         isLoading = true
         errorMessage = nil
-
+        
         do {
-            let notifications = try await repository.fetchNotifications(filter: .unread)
+            let notifications = try await repository.fetchNotifications(filter: .all)
             appState.notifications = notifications
             isLoading = false
         } catch is CancellationError {
@@ -150,7 +145,7 @@ struct InboxView: View {
             errorMessage = "Please sign in to view notifications."
             isLoading = false
         }
-
+        
     }
     
     private func markAsRead(_ notification: AppNotification) {
@@ -167,36 +162,24 @@ struct InboxView: View {
         }
     }
     
-    private func markAllAsRead() {
-        Task { @MainActor in
-            // Set flag to prevent immediate reload
-            justMarkedAllRead = true
+    private func markAllAsRead() async {
+        guard !isMarkingAllRead else { return }
+        isMarkingAllRead = true
+        errorMessage = nil
+        
+        do {
+            try await repository.markAllAsRead()
             
-            do {
-                // Mark all as read in the database first
-                try await repository.markAllAsRead()
-                
-                // Wait a moment to ensure database update is committed
-                try? await Task.sleep(nanoseconds: 500_000_000) // 0.5 seconds
-                
-                // Then immediately clear all unread notifications from local state
-                // This makes them disappear from the UI instantly
-                appState.notifications.removeAll { !$0.read }
-                
-                // Clear the array completely since we only show unread
-                appState.notifications = []
-                
-                // Reset flag after a longer delay to prevent any race conditions
-                // This ensures the database update is fully committed before allowing reloads
-                try? await Task.sleep(nanoseconds: 2_000_000_000) // 2 seconds
-                justMarkedAllRead = false
-            } catch {
-                print("Failed to mark all as read: \(error.localizedDescription)")
-                justMarkedAllRead = false
-                // If database update fails, reload to restore state
-                await loadNotifications()
+            // Mark all locally so the unread list and badge clear immediately
+            for index in appState.notifications.indices {
+                appState.notifications[index].read = true
             }
+        } catch {
+            print("Failed to mark all as read: \(error.localizedDescription)")
+            errorMessage = "Failed to mark notifications as read. Please try again."
         }
+        
+        isMarkingAllRead = false
     }
 }
 
