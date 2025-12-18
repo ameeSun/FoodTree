@@ -241,17 +241,22 @@ class FoodPostRepository: ObservableObject {
     /// Extend post expiration time
     func extendPost(postId: String, additionalMinutes: Int) async throws {
         // Fetch current expiration
-        let post: FoodPostDTO = try await supabase.database
-            .from("food_posts")
-            .select("expires_at")
-            .eq("id", value: postId)
-            .single()
-            .execute()
-            .value
-        
-        guard let currentExpiry = post.expiresAt else {
-            throw NetworkError.invalidData
-        }
+        struct ExpirationResponse: Decodable {
+                    let expires_at: Date?
+                }
+
+                // Fetch current expiration
+                let post: ExpirationResponse = try await supabase.database
+                    .from("food_posts")
+                    .select("expires_at")
+                    .eq("id", value: postId)
+                    .single()
+                    .execute()
+                    .value
+
+                guard let currentExpiry = post.expires_at else {
+                    throw NetworkError.invalidData
+                }
         
         let newExpiry = currentExpiry.addingTimeInterval(TimeInterval(additionalMinutes * 60))
         

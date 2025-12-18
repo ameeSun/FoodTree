@@ -14,6 +14,7 @@ struct MapView: View {
     @StateObject private var locationManager = LocationManager()
     @State private var sheetDetent: BottomSheet<AnyView>.Detent = .peek
     @State private var selectedPost: FoodPost?
+    @State private var detailPost: FoodPost?
     @State private var showFilters = false
     @State private var region = MKCoordinateRegion(
         center: MockData.stanfordCenter,
@@ -40,6 +41,8 @@ struct MapView: View {
                                 region.center = annotation.coordinate
                             }
                             FTHaptics.light()
+                            detailPost = annotation.post
+                            
                         }
                 }
             }
@@ -177,6 +180,16 @@ struct MapView: View {
                     await viewModel.loadPosts(locationManager: locationManager)
                 }
             }
+        }
+        .sheet(item: $detailPost) { post in
+            FoodDetailView(post: post, isPresented: Binding(
+                get: { detailPost != nil },
+                set: { newValue in
+                    if !newValue {
+                        detailPost = nil
+                    }
+                }
+            ))
         }
     }
     

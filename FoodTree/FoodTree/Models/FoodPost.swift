@@ -121,7 +121,7 @@ enum DietaryTag: String, CaseIterable, Identifiable {
     case kosher = "kosher"
     case glutenFree = "glutenfree"
     case dairyFree = "dairyfree"
-    case containsNuts = "nuts"
+    case containsNuts = "contains_nuts"
     
     var id: String { rawValue }
     
