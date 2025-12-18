@@ -5,191 +5,218 @@ struct LoginView: View {
     @State private var email: String = ""
     @State private var password: String = ""
     @State private var confirmPassword: String = ""
-    @State private var selectedRole: UserRole? = nil
+    @State private var selectedRoles: Set<UserRole> = []
     @State private var isSignUpMode = false
     @AppStorage("hasAcceptedEULA") private var hasAcceptedEULA = false
     @State private var showTermsSheet = false
     
-    var body: some View {
-        ZStack {
-            Color.bgElev1.ignoresSafeArea()
-            
-            VStack(spacing: 24) {
-                // Logo / Header
-                VStack(spacing: 16) {
-                    Image("TreeBitesLogo")
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: 120, height: 120)
-                        .shadow(color: .black.opacity(0.08), radius: 10, x: 0, y: 6)
-                    
-                    Text("Tree Bites")
-                        .font(.system(size: 32, weight: .bold))
-                        .foregroundColor(.brandPrimaryInk)
-                    
-                    Text("Stanford Food Sharing")
-                        .font(.system(size: 18, weight: .medium))
-                        .foregroundColor(.inkSecondary)
-                }
-                .padding(.top, 60)
-                
-                Spacer()
-                
-                // Auth Form
-                VStack(spacing: 24) {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text(isSignUpMode ? "Create Account" : "Welcome Back")
-                            .font(.title2)
-                            .fontWeight(.bold)
-                            .foregroundColor(.inkPrimary)
-                        
-                        Text(isSignUpMode ? "Sign up with your Stanford email" : "Login to your account")
-                            .foregroundColor(.inkSecondary)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    
-                    // Error Banner
-                    if let error = authService.errorMessage {
-                        AuthErrorBanner(message: error)
-                    }
-                    
-                    // Email Field
-                    TextField("sunet@stanford.edu", text: $email)
-                        .keyboardType(.emailAddress)
-                        .autocapitalization(.none)
-                        .padding()
-                        .foregroundColor(.inkPrimary)
-                        .background(Color.bgElev2Card)
-                        .cornerRadius(12)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 12)
-                                .stroke(Color.inkMuted.opacity(0.3), lineWidth: 1)
-                        )
-                    
-                    // Password Field
-                    SecureField("Password", text: $password)
-                        .padding()
-                        .background(Color.bgElev2Card)
-                        .foregroundColor(.inkPrimary)
-                        .cornerRadius(12)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 12)
-                                .stroke(Color.inkMuted.opacity(0.3), lineWidth: 1)
-                        )
-                    
-                    // Confirm Password (Sign-up only)
-                    if isSignUpMode {
-                        SecureField("Confirm Password", text: $confirmPassword)
-                            .padding()
-                            .background(Color.bgElev2Card)
-                            .foregroundColor(.inkPrimary)
-                            .cornerRadius(12)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 12)
-                                    .stroke(Color.inkMuted.opacity(0.3), lineWidth: 1)
-                            )
-                        
-                        // Role Selection
-                        VStack(spacing: 12) {
-                            Text("I am a...")
-                                .font(.subheadline)
-                                .foregroundColor(.inkSecondary)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                            
-                            HStack(spacing: 12) {
-                                RoleButton(
-                                    title: "Student",
-                                    icon: "person.fill",
-                                    isSelected: selectedRole == .student,
-                                    action: { selectedRole = .student }
-                                )
-                                
-                                RoleButton(
-                                    title: "Administrator",
-                                    icon: "person.3.fill",
-                                    isSelected: selectedRole == .organizer,
-                                    action: { selectedRole = .organizer }
-                                )
-                            }
-                        }
-                        TermsAcceptanceView(
-                            hasAcceptedEULA: $hasAcceptedEULA,
-                            showTermsSheet: $showTermsSheet
-                        )
-                    }
-                    
-                    
-                                        
-                    // Submit Button
-                    Button(action: {
-                        Task {
-                            if isSignUpMode {
-                                guard password == confirmPassword else {
-                                    authService.errorMessage = "Passwords don't match"
-                                    return
-                                }
-                                guard let role = selectedRole else {
-                                    authService.errorMessage = "Please select a role"
-                                    return
-                                }
-                                guard hasAcceptedEULA else {
-                                    authService.errorMessage = "Please agree to the Tree Bites EULA and zero-tolerance policy to create an account"
-                                    return
-                                }
-                                _ = await authService.signUp(email: email, password: password, role: role)
-                            } else {
-                                _ = await authService.signIn(email: email, password: password)
-                            }
-                        }
-                    }) {
-                        if authService.isLoading {
-                            ProgressView()
-                                .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                        } else {
-                            Text(isSignUpMode ? "Sign Up" : "Login")
-                                .fontWeight(.semibold)
-                        }
-                    }
-                    .buttonStyle(PrimaryButtonStyle())
-                    .disabled(
-                        email.isEmpty ||
-                        password.isEmpty ||
-                        (isSignUpMode && (confirmPassword.isEmpty || selectedRole == nil || !hasAcceptedEULA))
-                    )
-                    
-                    // Toggle Login/Sign-up
-                    Button(action: {
-                        withAnimation {
-                            isSignUpMode.toggle()
-                            password = ""
-                            confirmPassword = ""
-                            selectedRole = nil
-                            authService.errorMessage = nil
-                        }
-                    }) {
-                        HStack(spacing: 4) {
-                            Text(isSignUpMode ? "Already have an account?" : "Don't have an account?")
-                                .foregroundColor(.inkSecondary)
-                            Text(isSignUpMode ? "Login" : "Sign Up")
-                                .foregroundColor(.brandPrimary)
-                                .fontWeight(.semibold)
-                        }
-                        .font(.subheadline)
-                    }
-                    
-                    
-                }
-                .padding()
-                .background(Color.bgElev2Card)
-                .cornerRadius(24)
-                .ftShadow()
-                
-                Spacer()
+    private func toggleRole(_ role: UserRole) {
+            if selectedRoles.contains(role) {
+                selectedRoles.remove(role)
+            } else {
+                selectedRoles.insert(role)
             }
-            .padding(24)
+        }
+
+        private func selectedRoleForSignUp() -> UserRole? {
+            if selectedRoles.contains(.student) && selectedRoles.contains(.organizer) {
+                return .both
+            } else if selectedRoles.contains(.organizer) {
+                return .organizer
+            } else if selectedRoles.contains(.student) {
+                return .student
+            } else {
+                return nil
+            }
+        }
+
+    var body: some View {
+            ZStack {
+                Color.bgElev1.ignoresSafeArea()
+
+                ScrollView(.vertical, showsIndicators: false) {
+                    VStack(spacing: 24) {
+                        // Logo / Header
+                        VStack(spacing: 16) {
+                            Image("TreeBitesLogo")
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 120, height: 120)
+                                .shadow(color: .black.opacity(0.08), radius: 10, x: 0, y: 6)
+
+                            Text("Tree Bites")
+                                .font(.system(size: 32, weight: .bold))
+                                .foregroundColor(.brandPrimaryInk)
+
+                            Text("Stanford Food Sharing")
+                                .font(.system(size: 18, weight: .medium))
+                                .foregroundColor(.inkSecondary)
+                        }
+                        .padding(.top, 60)
+
+                        // Auth Form
+                        VStack(spacing: 24) {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text(isSignUpMode ? "Create Account" : "Welcome Back")
+                                    .font(.title2)
+                                    .fontWeight(.bold)
+                                    .foregroundColor(.inkPrimary)
+
+                                Text(isSignUpMode ? "Sign up with your Stanford email" : "Login to your account")
+                                    .foregroundColor(.inkSecondary)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+
+                            // Error Banner
+                            if let error = authService.errorMessage {
+                                AuthErrorBanner(message: error)
+                            }
+
+                            // Email Field
+                            TextField("sunet@stanford.edu", text: $email)
+                                .keyboardType(.emailAddress)
+                                .autocapitalization(.none)
+                                .padding()
+                                .foregroundColor(.inkPrimary)
+                                .background(Color.bgElev2Card)
+                                .cornerRadius(12)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 12)
+                                        .stroke(Color.inkMuted.opacity(0.3), lineWidth: 1)
+                                )
+
+                            // Password Field
+                            SecureField("Password", text: $password)
+                                .padding()
+                                .background(Color.bgElev2Card)
+                                .foregroundColor(.inkPrimary)
+                                .cornerRadius(12)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 12)
+                                        .stroke(Color.inkMuted.opacity(0.3), lineWidth: 1)
+                                )
+
+                            // Confirm Password (Sign-up only)
+                            if isSignUpMode {
+                                SecureField("Confirm Password", text: $confirmPassword)
+                                    .padding()
+                                    .background(Color.bgElev2Card)
+                                    .foregroundColor(.inkPrimary)
+                                    .cornerRadius(12)
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 12)
+                                            .stroke(Color.inkMuted.opacity(0.3), lineWidth: 1)
+                                    )
+
+                                // Role Selection
+                                VStack(spacing: 12) {
+                                    Text("I am a...")
+                                        .font(.subheadline)
+                                        .foregroundColor(.inkSecondary)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+
+                                    HStack(spacing: 12) {
+                                        RoleButton(
+                                            title: "Student",
+                                            icon: "person.fill",
+                                            isSelected: selectedRoles.contains(.student),
+                                            action: { toggleRole(.student) }
+                                        )
+
+                                        RoleButton(
+                                            title: "Administrator",
+                                            icon: "person.3.fill",
+                                            isSelected: selectedRoles.contains(.organizer),
+                                            action: { toggleRole(.organizer) }
+                                        )
+                                    }
+
+                                    if selectedRoles.contains(.student) && selectedRoles.contains(.organizer) {
+                                        Text("You'll receive student updates and can also post as an administrator.")
+                                            .font(.footnote)
+                                            .foregroundColor(.inkSecondary)
+                                            .frame(maxWidth: .infinity, alignment: .leading)
+                                    }
+                                }
+                                TermsAcceptanceView(
+                                    hasAcceptedEULA: $hasAcceptedEULA,
+                                    showTermsSheet: $showTermsSheet
+                                )
+                            }
+
+                            // Submit Button
+                            Button(action: {
+                                Task {
+                                    if isSignUpMode {
+                                        guard password == confirmPassword else {
+                                            authService.errorMessage = "Passwords don't match"
+                                            return
+                                        }
+                                        guard let role = selectedRoleForSignUp() else {
+                                            authService.errorMessage = "Please select at least one role"
+                                            return
+                                        }
+                                        guard hasAcceptedEULA else {
+                                            authService.errorMessage = "Please agree to the Tree Bites EULA and zero-tolerance policy to create an account"
+                                            return
+                                        }
+                                        _ = await authService.signUp(email: email, password: password, role: role)
+                                    } else {
+                                        _ = await authService.signIn(email: email, password: password)
+                                    }
+                                }
+                            }) {
+                                if authService.isLoading {
+                                    ProgressView()
+                                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                } else {
+                                    Text(isSignUpMode ? "Sign Up" : "Login")
+                                        .fontWeight(.semibold)
+                                }
+                            }
+                            .buttonStyle(PrimaryButtonStyle())
+                            .disabled(
+                                email.isEmpty ||
+                                password.isEmpty ||
+                                (isSignUpMode && (confirmPassword.isEmpty || selectedRoles.isEmpty || !hasAcceptedEULA))
+                            )
+
+                            // Toggle Login/Sign-up
+                            Button(action: {
+                                withAnimation {
+                                    isSignUpMode.toggle()
+                                    password = ""
+                                    confirmPassword = ""
+                                    selectedRoles = []
+                                    authService.errorMessage = nil
+                                }
+                            }) {
+                                HStack(spacing: 4) {
+                                    Text(isSignUpMode ? "Already have an account?" : "Don't have an account?")
+                                        .foregroundColor(.inkSecondary)
+                                    Text(isSignUpMode ? "Login" : "Sign Up")
+                                        .foregroundColor(.brandPrimary)
+                                        .fontWeight(.semibold)
+                                }
+                                .font(.subheadline)
+                            }
+
+
+                        }
+                        .padding()
+                        .background(Color.bgElev2Card)
+                        .cornerRadius(24)
+                        .ftShadow()
+
+                        Spacer()
+                    }
+                    .padding(24)
+                }
+                .scrollDismissesKeyboard(.interactively)
+            }
         }
     }
-}
+
 
 struct AuthErrorBanner: View {
     let message: String

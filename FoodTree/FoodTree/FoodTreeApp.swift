@@ -103,6 +103,7 @@ class AppState: ObservableObject {
 enum UserRole: String, CaseIterable, Codable {
     case student = "student"
     case organizer = "organizer"
+    case both = "both"
     
     var displayName: String {
         switch self {
@@ -110,7 +111,12 @@ enum UserRole: String, CaseIterable, Codable {
             return "Student"
         case .organizer:
             return "Administrator"
+        case .both:
+            return "Student & Administrator"
         }
+    }
+    var hasOrganizerAccess: Bool {
+        self == .organizer || self == .both
     }
 }
 

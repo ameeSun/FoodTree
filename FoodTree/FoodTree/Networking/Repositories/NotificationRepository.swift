@@ -67,7 +67,7 @@ final class NotificationRepository: ObservableObject {
         // Update is_read
         try await supabase.database
             .from("notifications")
-            .update(["is_read": AnyCodable(true), "updated_at": AnyCodable(Date().toISO8601String())])
+            .update(["is_read": AnyCodable(true)])
             .eq("id", value: notificationId)
             .execute()
         
@@ -80,7 +80,7 @@ final class NotificationRepository: ObservableObject {
         
         try await supabase.database
             .from("notifications")
-            .update(["is_read": AnyCodable(true), "updated_at": AnyCodable(Date().toISO8601String())])
+            .update(["is_read": AnyCodable(true)])
             .eq("user_id", value: userId.uuidString)
             .eq("is_read", value: false)
             .execute()

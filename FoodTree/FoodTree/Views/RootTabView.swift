@@ -74,7 +74,7 @@ struct RootTabView: View {
                                 FTHaptics.light()
                                 
                                 // Check if user is an organizer/administrator
-                                if let user = authService.currentUser, user.role == .organizer {
+                                if let user = authService.currentUser, user.role.hasOrganizerAccess {
                                     showPostComposer = true
                                 } else {
                                     // Show message for students

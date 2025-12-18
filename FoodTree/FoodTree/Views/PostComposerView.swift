@@ -133,7 +133,7 @@ struct PostComposerView: View {
             return
         }
         
-        guard let user = AuthService.shared.currentUser, user.role == .organizer else {
+        guard let user = AuthService.shared.currentUser, user.role.hasOrganizerAccess else {
             publishError = "You are a student and unable to post. Only administrators can create food posts."
             return
         }

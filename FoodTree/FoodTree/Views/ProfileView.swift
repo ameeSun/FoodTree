@@ -67,7 +67,7 @@ struct ProfileView: View {
                     }
                     .padding(.top, 20)
                     
-                    if userRole == .organizer {
+                    if userRole.hasOrganizerAccess {
                         // Organizer dashboard link
                         Button(action: {
                             showOrganizerDashboard = true
