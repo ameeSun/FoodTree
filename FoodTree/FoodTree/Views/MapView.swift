@@ -210,6 +210,20 @@ class MapViewModel: ObservableObject {
     @Published var blockedOrganizers: Set<String> = []
     
     private let repository = FoodPostRepository()
+    private var blockedObserver: NSObjectProtocol?
+    
+    init() {
+        blockedOrganizers = BlockedOrganizerStore.loadIds()
+        blockedObserver = NotificationCenter.default.addObserver(
+            forName: BlockedOrganizerStore.updatedNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            guard let self else { return }
+            self.blockedOrganizers = BlockedOrganizerStore.loadIds()
+            self.posts.removeAll { self.blockedOrganizers.contains($0.organizer.id) }
+        }
+    }
     
     var hasActiveFilters: Bool {
         !filters.dietary.isEmpty || filters.distance < 3.0 || filters.onlyVerified
@@ -249,6 +263,7 @@ class MapViewModel: ObservableObject {
                 filters: postFilters
             )
             
+            let blocked = BlockedOrganizerStore.load()
             await MainActor.run {
                 self.posts = fetchedPosts.filter { !blockedOrganizers.contains($0.organizer.id) }
                 self.isLoading = false
@@ -266,6 +281,7 @@ class MapViewModel: ObservableObject {
     }
     
     func blockOrganizer(_ organizer: Organizer) {
+        BlockedOrganizerStore.add(organizer: organizer)
         blockedOrganizers.insert(organizer.id)
         posts.removeAll { $0.organizer.id == organizer.id }
     }

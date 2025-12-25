@@ -11,6 +11,8 @@ struct ProfileView: View {
     @EnvironmentObject var appState: AppState
     @State private var showOrganizerDashboard = false
     @State private var showCommunityGuidelines = false
+    @State private var showSavedPosts = false
+    @State private var showBlockedUsers = false
     @State private var showDeleteConfirm1 = false
     @State private var showDeleteConfirm2 = false
     @State private var isDeletingAccount = false
@@ -112,6 +114,26 @@ struct ProfileView: View {
                             )
                         }
                         
+                        SettingsSection(title: "Saved") {
+                                                    SettingsRow(
+                                                        icon: "bookmark.fill",
+                                                        title: "Saved Posts",
+                                                        value: nil,
+                                                        action: {
+                                                            showSavedPosts = true
+                                                        }
+                                                    )
+                                                    
+                                                    SettingsRow(
+                                                        icon: "person.crop.circle.badge.xmark",
+                                                        title: "Blocked Users",
+                                                        value: nil,
+                                                        action: {
+                                                            showBlockedUsers = true
+                                                        }
+                                                    )
+                                                }
+                        
                         SettingsSection(title: "Account") {
                             SettingsRow(
                                 icon: "arrow.right.square",
@@ -195,6 +217,12 @@ struct ProfileView: View {
         }
         .sheet(isPresented: $showCommunityGuidelines) {
             CommunityGuidelinesView()
+        }
+        .sheet(isPresented: $showSavedPosts) {
+            SavedPostsView()
+        }
+        .sheet(isPresented: $showBlockedUsers) {
+            BlockedUsersView()
         }
     }
     
@@ -350,3 +378,222 @@ struct SettingsView: View {
     }
 }
 
+// MARK: - Saved Posts
+struct SavedPostsView: View {
+    @Environment(\.dismiss) var dismiss
+    @State private var posts: [FoodPost] = []
+    @State private var isLoading = false
+    @State private var errorMessage: String?
+    
+    private let repository = FoodPostRepository()
+    
+    var body: some View {
+        NavigationView {
+            ScrollView {
+                VStack(spacing: 16) {
+                    if isLoading {
+                        ProgressView("Loading saved posts...")
+                            .padding(.top, 40)
+                    } else if let errorMessage {
+                        Text(errorMessage)
+                            .font(.system(size: 15))
+                            .foregroundColor(.stateError)
+                            .multilineTextAlignment(.center)
+                            .padding(.top, 40)
+                            .padding(.horizontal, 20)
+                    } else if posts.isEmpty {
+                        Text("No saved posts yet.")
+                            .font(.system(size: 16))
+                            .foregroundColor(.inkSecondary)
+                            .padding(.top, 40)
+                    } else {
+                        ForEach(posts) { post in
+                            SavedPostRow(post: post) {
+                                unsave(post)
+                            }
+                        }
+                    }
+                }
+                .padding(FTLayout.paddingM)
+            }
+            .background(Color.bgElev1)
+            .navigationTitle("Saved Posts")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                    .fontWeight(.semibold)
+                }
+            }
+            .onAppear {
+                Task {
+                    await loadSavedPosts()
+                }
+            }
+        }
+    }
+    
+    private func loadSavedPosts() async {
+        await MainActor.run {
+            isLoading = true
+            errorMessage = nil
+        }
+        
+        do {
+            let saved = try await repository.fetchSavedPosts()
+            await MainActor.run {
+                posts = saved
+                isLoading = false
+            }
+        } catch {
+            await MainActor.run {
+                errorMessage = "Unable to load saved posts."
+                isLoading = false
+            }
+        }
+    }
+    
+    private func unsave(_ post: FoodPost) {
+        Task {
+            do {
+                _ = try await repository.toggleSavedPost(postId: post.id)
+                await MainActor.run {
+                    posts.removeAll { $0.id == post.id }
+                }
+            } catch {
+                await MainActor.run {
+                    errorMessage = "Unable to unsave this post."
+                }
+            }
+        }
+    }
+}
+
+struct SavedPostRow: View {
+    let post: FoodPost
+    let onUnsave: () -> Void
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(post.title)
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundColor(.inkPrimary)
+            
+            Text(post.organizer.name)
+                .font(.system(size: 14))
+                .foregroundColor(.inkSecondary)
+            
+            Button(action: {
+                onUnsave()
+                FTHaptics.light()
+            }) {
+                Label("Unsave", systemImage: "bookmark.slash")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(.stateError)
+                    .padding(.vertical, 6)
+                    .padding(.horizontal, 12)
+                    .background(Color.stateError.opacity(0.1))
+                    .clipShape(Capsule())
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(FTLayout.paddingM)
+        .background(Color.bgElev2Card)
+        .clipShape(RoundedRectangle(cornerRadius: FTLayout.cornerRadiusCard))
+        .ftShadow()
+    }
+}
+
+// MARK: - Blocked Users
+struct BlockedUsersView: View {
+    @Environment(\.dismiss) var dismiss
+    @State private var blockedUsers: [BlockedOrganizer] = []
+    
+    var body: some View {
+        NavigationView {
+            ScrollView {
+                VStack(spacing: 16) {
+                    if blockedUsers.isEmpty {
+                        Text("No blocked users.")
+                            .font(.system(size: 16))
+                            .foregroundColor(.inkSecondary)
+                            .padding(.top, 40)
+                    } else {
+                        ForEach(blockedUsers) { user in
+                            BlockedUserRow(user: user) {
+                                unblock(user)
+                            }
+                        }
+                    }
+                }
+                .padding(FTLayout.paddingM)
+            }
+            .background(Color.bgElev1)
+            .navigationTitle("Blocked Users")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                    .fontWeight(.semibold)
+                }
+            }
+            .onAppear {
+                refreshBlockedUsers()
+            }
+        }
+    }
+    
+    private func refreshBlockedUsers() {
+        blockedUsers = BlockedOrganizerStore.load().sorted { $0.name < $1.name }
+    }
+    
+    private func unblock(_ user: BlockedOrganizer) {
+        BlockedOrganizerStore.remove(id: user.id)
+        refreshBlockedUsers()
+        FTHaptics.light()
+    }
+}
+
+struct BlockedUserRow: View {
+    let user: BlockedOrganizer
+    let onUnblock: () -> Void
+    
+    var body: some View {
+        HStack(spacing: 12) {
+            Circle()
+                .fill(Color.brandPrimary.opacity(0.2))
+                .frame(width: 40, height: 40)
+                .overlay(
+                    Text(String(user.name.prefix(1)))
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundColor(.brandPrimary)
+                )
+            
+            Text(user.name)
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundColor(.inkPrimary)
+            
+            Spacer()
+            
+            Button(action: {
+                onUnblock()
+            }) {
+                Text("Unblock")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(.stateError)
+                    .padding(.vertical, 6)
+                    .padding(.horizontal, 12)
+                    .background(Color.stateError.opacity(0.1))
+                    .clipShape(Capsule())
+            }
+        }
+        .padding(FTLayout.paddingM)
+        .background(Color.bgElev2Card)
+        .clipShape(RoundedRectangle(cornerRadius: FTLayout.cornerRadiusCard))
+        .ftShadow()
+    }
+}
