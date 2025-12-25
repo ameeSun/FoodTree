@@ -138,7 +138,10 @@ struct FeedView: View {
                             selectedPost = nil
                         }
                     }
-                ))
+                ), onBlockOrganizer: { organizer in
+                    viewModel.blockOrganizer(organizer)
+                    selectedPost = nil
+                })
             }
         }
     }
@@ -153,6 +156,7 @@ class FeedViewModel: ObservableObject {
     @Published var errorMessage: String?
     @Published var savedPosts: Set<String> = []
     @Published var hiddenPosts: Set<String> = []
+    @Published var blockedOrganizers: Set<String> = []
     
     private let repository = FoodPostRepository()
     
@@ -224,7 +228,9 @@ class FeedViewModel: ObservableObject {
             
             await MainActor.run {
                 // Filter out hidden posts
-                self.posts = fetchedPosts.filter { !hiddenPosts.contains($0.id) }
+                self.posts = fetchedPosts.filter {
+                    !hiddenPosts.contains($0.id) && !blockedOrganizers.contains($0.organizer.id)
+                }
                 self.isLoading = false
                 self.errorMessage = nil // Clear any previous errors on success
             }
@@ -275,6 +281,10 @@ class FeedViewModel: ObservableObject {
     func hidePost(_ post: FoodPost) {
         hiddenPosts.insert(post.id)
         posts.removeAll { $0.id == post.id }
+    }
+    func blockOrganizer(_ organizer: Organizer) {
+        blockedOrganizers.insert(organizer.id)
+        posts.removeAll { $0.organizer.id == organizer.id }
     }
 }
 

@@ -12,11 +12,13 @@ import UIKit
 struct FoodDetailView: View {
     let post: FoodPost
     @Binding var isPresented: Bool
+    var onBlockOrganizer: ((Organizer) -> Void)? = nil
     @State private var selectedImageIndex = 0
     @State private var showReportSheet = false
     @State private var showNavigationOptions = false
     @State private var isOnMyWay = false
     @State private var showSuccessConfetti = false
+    @State private var showBlockConfirmation = false
     @StateObject private var repository = FoodPostRepository()
     
     var body: some View {
@@ -249,7 +251,11 @@ struct FoodDetailView: View {
                         }) {
                             Label("Report", systemImage: "exclamationmark.triangle")
                         }
-                    } label: {
+                        Button(role: .destructive, action: {
+                            showBlockConfirmation = true
+                        }) {
+                            Label("Block \(post.organizer.name)", systemImage: "person.crop.circle.badge.xmark")
+                        }                    } label: {
                         Image(systemName: "ellipsis.circle.fill")
                             .font(.system(size: 28))
                             .foregroundColor(.inkMuted)
@@ -333,6 +339,14 @@ struct FoodDetailView: View {
             .sheet(isPresented: $showReportSheet) {
                 ReportView(postId: post.id, isPresented: $showReportSheet)
             }
+            .confirmationDialog("Block organizer?", isPresented: $showBlockConfirmation) {
+                Button("Block posts from \(post.organizer.name)", role: .destructive) {
+                    blockOrganizer()
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("You won't see posts from this organizer anymore.")
+            }
         }
     }
     
@@ -377,6 +391,12 @@ struct FoodDetailView: View {
     private func savePost() {
         FTHaptics.medium()
         // Save post (stub)
+    }
+    
+    private func blockOrganizer() {
+        onBlockOrganizer?(post.organizer)
+        FTHaptics.warning()
+        isPresented = false
     }
     
     private func openInAppleMaps() {

@@ -189,7 +189,12 @@ struct MapView: View {
                         detailPost = nil
                     }
                 }
-            ))
+            ), onBlockOrganizer: { organizer in
+                viewModel.blockOrganizer(organizer)
+                selectedPost = nil
+                detailPost = nil
+                sheetDetent = .peek
+            })
         }
     }
     
@@ -202,6 +207,7 @@ class MapViewModel: ObservableObject {
     @Published var filters = MapFilters()
     @Published var isLoading = false
     @Published var errorMessage: String?
+    @Published var blockedOrganizers: Set<String> = []
     
     private let repository = FoodPostRepository()
     
@@ -244,7 +250,7 @@ class MapViewModel: ObservableObject {
             )
             
             await MainActor.run {
-                self.posts = fetchedPosts
+                self.posts = fetchedPosts.filter { !blockedOrganizers.contains($0.organizer.id) }
                 self.isLoading = false
             }
         } catch {
@@ -257,6 +263,11 @@ class MapViewModel: ObservableObject {
     
     func refreshPosts(locationManager: LocationManager) async {
         await loadPosts(locationManager: locationManager)
+    }
+    
+    func blockOrganizer(_ organizer: Organizer) {
+        blockedOrganizers.insert(organizer.id)
+        posts.removeAll { $0.organizer.id == organizer.id }
     }
 }
 
